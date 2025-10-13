@@ -1,0 +1,45 @@
+datasource db {
+  provider = "mysql" // ou "postgresql" selon ta DB
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id          Int       @id @default(autoincrement())
+  username    String    @unique
+  password    String
+  githubToken String?
+  projects    Project[]
+}
+
+model Project {
+  id              Int     @id @default(autoincrement())
+  name            String
+  githubOrg       String
+  minStudents     Int
+  maxStudents     Int
+  groupConvention String
+  uniqueUrl       String  @unique
+  userId          Int
+  user            User    @relation(fields: [userId], references: [id])
+  groups          Group[]
+}
+
+model Group {
+  id        Int       @id @default(autoincrement())
+  name      String
+  projectId Int
+  project   Project   @relation(fields: [projectId], references: [id])
+  students  Student[]
+}
+
+model Student {
+  id             Int    @id @default(autoincrement())
+  fullName       String
+  githubUsername String
+  groupId        Int
+  group          Group  @relation(fields: [groupId], references: [id])
+}

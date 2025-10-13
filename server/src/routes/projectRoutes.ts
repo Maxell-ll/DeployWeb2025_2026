@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middlewares/authMiddleware";
-import { getUserProjects, getNextProjectId, createProject } from "../controllers/projectController";
+import {getUserProjects, getNextProjectId, createProject, getProjectPublic} from "../controllers/projectController";
 
 const router = express.Router();
 
@@ -12,5 +12,7 @@ router.get("/next-id", verifyToken, getNextProjectId);
 
 // Créer un projet
 router.post("/", verifyToken, createProject);
+
+router.get("public/:projectId/:uniqueKey", getProjectPublic);
 
 export default router;

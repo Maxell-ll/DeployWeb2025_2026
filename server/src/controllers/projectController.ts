@@ -6,16 +6,10 @@ import crypto from "crypto";
 export const getUserProjects = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
-
         const projects = await prisma.project.findMany({
             where: { userId },
-            include: {
-                groups: {
-                    include: { students: true },
-                },
-            },
+            include: { groups: { include: { students: true } } },
         });
-
         res.json(projects);
     } catch (err) {
         console.error("❌ Erreur dans getUserProjects:", err);
@@ -41,16 +35,12 @@ export const getNextProjectId = async (req: Request, res: Response) => {
 export const createProject = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
-        const { name, githubOrg, minStudents, maxStudents, groupConvention } = req.body;
+        const { name, githubOrg, minStudents, maxStudents, groupConvention, uniqueKey, uniqueUrl } = req.body;
 
-        if (!name || !githubOrg) {
+        if (!name || !githubOrg || !uniqueKey || !uniqueUrl) {
             return res.status(400).json({ message: "Champs obligatoires manquants" });
         }
 
-        // Génère une clé unique aléatoire pour l'URL
-        const uniqueKey = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-
-        // Crée le projet sans URL finale
         const project = await prisma.project.create({
             data: {
                 name,
@@ -59,22 +49,36 @@ export const createProject = async (req: Request, res: Response) => {
                 maxStudents,
                 groupConvention,
                 userId,
-                uniqueUrl: "", // temporaire
+                uniqueUrl,
             },
         });
 
-        // Crée l’URL finale
-        const finalUrl = `${req.protocol}://${req.get("host")}/CreateGroups/${project.id}/${uniqueKey}`;
-
-        // Met à jour le projet avec cette URL
-        const updatedProject = await prisma.project.update({
-            where: { id: project.id },
-            data: { uniqueUrl: finalUrl },
-        });
-
-        res.status(201).json(updatedProject);
+        res.status(201).json(project);
     } catch (err) {
         console.error("❌ Erreur lors de la création du projet :", err);
+        res.status(500).json({ message: "Erreur serveur", error: err });
+    }
+};
+
+// 🔹 Récupérer un projet public via ID et clé
+export const getProjectPublic = async (req: Request, res: Response) => {
+    try {
+        const { projectId, uniqueKey } = req.params;
+
+        const project = await prisma.project.findUnique({
+            where: { id: Number(projectId) },
+            include: { groups: { include: { students: true } } },
+        });
+
+        if (!project) return res.status(404).json({ message: "Projet non trouvé" });
+
+        if (!project.uniqueUrl?.includes(uniqueKey)) {
+            return res.status(403).json({ message: "Clé invalide" });
+        }
+
+        res.json(project);
+    } catch (err) {
+        console.error("❌ Erreur getProjectPublic:", err);
         res.status(500).json({ message: "Erreur serveur", error: err });
     }
 };

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, Typography, Button, Grid, Chip } from "@mui/material";
+import { Card, CardContent, Typography, Button, Grid } from "@mui/material";
 
 interface Project {
     id: number;
@@ -19,7 +19,7 @@ const Dashboard: React.FC = () => {
 
     useEffect(() => {
         const fetchProjects = async () => {
-            const token = localStorage.getItem("token");
+            const token = localStorage.getItem("jwtToken"); // ✅ clé correcte
             if (!token) {
                 console.warn("⚠️ Aucun token trouvé, redirection vers login");
                 navigate("/login");
@@ -34,7 +34,8 @@ const Dashboard: React.FC = () => {
                 });
 
                 if (!res.ok) {
-                    console.error("Erreur API :", res.status);
+                    const errorData = await res.json().catch(() => ({}));
+                    console.error("❌ Erreur API :", res.status, errorData);
                     return;
                 }
 
@@ -42,7 +43,7 @@ const Dashboard: React.FC = () => {
                 console.log("✅ Projets récupérés :", data);
                 setProjects(data);
             } catch (err) {
-                console.error("Erreur réseau :", err);
+                console.error("❌ Erreur réseau :", err);
             }
         };
 
@@ -59,25 +60,29 @@ const Dashboard: React.FC = () => {
             </header>
 
             <Grid container spacing={3}>
-                {projects.map((project) => (
-                    <Grid item xs={12} sm={6} md={4} key={project.id}>
-                        <Card>
-                            <CardContent>
-                                <Typography variant="h6">{project.name}</Typography>
-                                <Typography variant="body2">Organisation : {project.githubOrg}</Typography>
-                                <Typography variant="body2">
-                                    Étudiants : {project.minStudents}–{project.maxStudents}
-                                </Typography>
-                                <Typography variant="body2">
-                                    Groupes : {project.groups.length}
-                                </Typography>
-                                <Typography variant="caption">
-                                    URL unique : {project.uniqueUrl}
-                                </Typography>
-                            </CardContent>
-                        </Card>
-                    </Grid>
-                ))}
+                {projects.length === 0 ? (
+                    <Typography variant="body1" sx={{ margin: "2rem auto" }}>
+                        Aucun projet disponible.
+                    </Typography>
+                ) : (
+                    projects.map((project) => (
+                        <Grid item xs={12} sm={6} md={4} key={project.id}>
+                            <Card>
+                                <CardContent>
+                                    <Typography variant="h6">{project.name}</Typography>
+                                    <Typography variant="body2">Organisation : {project.githubOrg}</Typography>
+                                    <Typography variant="body2">
+                                        Étudiants : {project.minStudents}–{project.maxStudents}
+                                    </Typography>
+                                    <Typography variant="body2">Groupes : {project.groups.length}</Typography>
+                                    <Typography variant="caption" sx={{ wordBreak: "break-all" }}>
+                                        URL unique : {project.uniqueUrl}
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+                    ))
+                )}
             </Grid>
         </div>
     );

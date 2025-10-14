@@ -23,6 +23,6 @@ router.put("/:id", verifyToken, updateProject);
 
 router.delete("/:id", verifyToken, deleteProject);
 
-router.get("public/:projectId/:uniqueKey", getProjectPublic);
+router.get("/public/:projectId/:uniqueKey", getProjectPublic);
 
 export default router;

@@ -11,18 +11,27 @@ const CreateGroup: React.FC = () => {
     const { projectId, uniqueKey } = useParams<{ projectId: string; uniqueKey: string }>();
     const [students, setStudents] = useState<Student[]>([{ fullName: "", githubUsername: "" }]);
     const [project, setProject] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
 
     // Récupérer les infos du projet via l'API publique
     useEffect(() => {
-        if (projectId && uniqueKey) {
-            fetch(`${import.meta.env.VITE_API_URL}/projects/${projectId}/${uniqueKey}`)
-                .then((res) => {
-                    if (!res.ok) throw new Error("Projet non trouvé ou clé invalide");
-                    return res.json();
-                })
-                .then((data) => setProject(data))
-                .catch((err) => console.error("Erreur récupération projet :", err));
-        }
+        if (!projectId || !uniqueKey) return;
+
+        const fetchProject = async () => {
+            try {
+                const res = await fetch(`${import.meta.env.VITE_API_URL}/projects/public/${projectId}/${uniqueKey}`);
+                if (!res.ok) throw new Error("Projet non trouvé ou clé invalide");
+                const data = await res.json();
+                setProject(data);
+            } catch (err) {
+                console.error("Erreur récupération projet :", err);
+                alert("Projet introuvable ou clé invalide !");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchProject();
     }, [projectId, uniqueKey]);
 
     const handleStudentChange = (index: number, field: keyof Student, value: string) => {
@@ -39,18 +48,15 @@ const CreateGroup: React.FC = () => {
         if (!projectId || !uniqueKey) return;
 
         try {
-            const response = await fetch(
-                `${import.meta.env.VITE_API_URL}/groups/${projectId}/${uniqueKey}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ students }),
-                }
-            );
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/groups/${projectId}/${uniqueKey}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ students }),
+            });
 
-            if (!response.ok) {
-                const data = await response.json();
-                console.error("Erreur création groupes :", data.message);
+            if (!res.ok) {
+                const data = await res.json();
+                alert("Erreur création groupes : " + data.message);
                 return;
             }
 
@@ -58,21 +64,37 @@ const CreateGroup: React.FC = () => {
             setStudents([{ fullName: "", githubUsername: "" }]);
         } catch (err) {
             console.error("Erreur serveur :", err);
+            alert("Erreur serveur, veuillez réessayer.");
         }
     };
+
+    if (loading) {
+        return (
+            <div style={{ padding: "2rem", textAlign: "center" }}>
+                <Typography variant="h6">Chargement du projet...</Typography>
+            </div>
+        );
+    }
+
+    if (!project) {
+        return (
+            <div style={{ padding: "2rem", textAlign: "center" }}>
+                <Typography variant="h6" color="error">
+                    Projet introuvable ou clé invalide
+                </Typography>
+            </div>
+        );
+    }
 
     return (
         <div style={{ padding: "2rem" }}>
             <Card sx={{ maxWidth: 600, margin: "auto", p: 3 }}>
                 <CardContent>
                     <Typography variant="h5" gutterBottom>
-                        {project ? `Créer un groupe pour : ${project.name}` : "Chargement du projet..."}
+                        Créer un groupe pour : {project.name}
                     </Typography>
 
-                    <form
-                        onSubmit={handleSubmit}
-                        style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-                    >
+                    <form style={{ display: "flex", flexDirection: "column", gap: "1rem" }} onSubmit={handleSubmit}>
                         {students.map((student, index) => (
                             <Card key={index} sx={{ p: 2, mt: 2 }}>
                                 <Typography variant="subtitle1">Étudiant {index + 1}</Typography>
@@ -82,6 +104,7 @@ const CreateGroup: React.FC = () => {
                                     onChange={(e) => handleStudentChange(index, "fullName", e.target.value)}
                                     fullWidth
                                     sx={{ mt: 1 }}
+                                    required
                                 />
                                 <TextField
                                     label="Pseudo GitHub"
@@ -89,12 +112,14 @@ const CreateGroup: React.FC = () => {
                                     onChange={(e) => handleStudentChange(index, "githubUsername", e.target.value)}
                                     fullWidth
                                     sx={{ mt: 1 }}
+                                    required
                                 />
                                 <Button
                                     variant="outlined"
                                     color="error"
                                     onClick={() => removeStudent(index)}
                                     sx={{ mt: 1 }}
+                                    disabled={students.length === 1}
                                 >
                                     Supprimer
                                 </Button>

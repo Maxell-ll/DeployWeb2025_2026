@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
     TextField,
     Button,
@@ -11,68 +11,85 @@ import {
     IconButton,
 } from "@mui/material";
 import { Octokit } from "@octokit/rest";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { useAuth } from "../context/AuthContext";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const FRONT_URL = import.meta.env.VITE_FRONT_URL || window.location.origin;
 
+interface Project {
+    id: number;
+    name: string;
+    githubOrg: string;
+    minStudents: number;
+    maxStudents: number;
+    groupConvention: string;
+    uniqueUrl: string;
+    uniqueKey: string;
+}
+
 const CreateProject: React.FC = () => {
-    const [projectName, setProjectName] = useState("");
-    const [githubOrg, setGithubOrg] = useState("");
-    const [organizations, setOrganizations] = useState<string[]>([]);
-    const [minStudents, setMinStudents] = useState(1);
-    const [maxStudents, setMaxStudents] = useState(5);
-    const [groupConvention] = useState("Groupe-XX");
-    const [generatedUrl, setGeneratedUrl] = useState("");
-    const [uniqueKey, setUniqueKey] = useState("");
-    const [nextProjectId, setNextProjectId] = useState(0);
+    const { token, logout } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
 
-    // Récupérer le prochain ID depuis le backend et générer URL
+    const rawProject = (location.state as any)?.project;
+    const editingProject =
+        rawProject && typeof rawProject.id === "number" ? (rawProject as Project) : undefined;
+
+    const [projectName, setProjectName] = useState(editingProject?.name || "");
+    const [githubOrg, setGithubOrg] = useState(editingProject?.githubOrg || "");
+    const [organizations, setOrganizations] = useState<string[]>([]);
+    const [minStudents, setMinStudents] = useState(editingProject?.minStudents || 1);
+    const [maxStudents, setMaxStudents] = useState(editingProject?.maxStudents || 1);
+    const [groupConvention] = useState(editingProject?.groupConvention || "Groupe-XX");
+    const [generatedUrl, setGeneratedUrl] = useState(editingProject?.uniqueUrl || "");
+    const [uniqueKey, setUniqueKey] = useState(editingProject?.uniqueKey || "");
+
+    // Génération d'URL si création d’un nouveau projet
     useEffect(() => {
-        const fetchNextIdAndGenerateUrl = async () => {
-            const token = localStorage.getItem("jwtToken");
-            if (!token) return;
+        if (editingProject) return;
 
+        const fetchNextId = async () => {
             try {
                 const res = await fetch(`${API_URL}/projects/next-id`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                if (!res.ok) return;
-                const data = await res.json();
-                setNextProjectId(data.nextId);
+                if (res.status === 401) {
+                    logout();
+                    return;
+                }
 
-                // Générer clé unique ≥50 caractères
+                const data = await res.json();
                 const array = new Uint8Array(32);
                 crypto.getRandomValues(array);
-                const key = Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("").slice(0, 50);
-                setUniqueKey(key);
+                const key = Array.from(array, (b) => b.toString(16).padStart(2, "0"))
+                    .join("")
+                    .slice(0, 50);
 
+                setUniqueKey(key);
                 setGeneratedUrl(`${FRONT_URL}/CreateGroups/${data.nextId}/${key}`);
             } catch (err) {
                 console.error("❌ Erreur récupération nextId :", err);
             }
         };
 
-        fetchNextIdAndGenerateUrl();
-    }, []);
+        fetchNextId();
+    }, [editingProject, token, logout]);
 
-    // Récupérer organisations GitHub
+    // Récupération des organisations GitHub
     useEffect(() => {
         const fetchOrganizations = async () => {
             try {
-                const token = localStorage.getItem("jwtToken");
-                if (!token) {
-                    navigate("/login");
-                    return;
-                }
-
                 const res = await fetch(`${API_URL}/users/github-token`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
+                if (res.status === 401) {
+                    logout();
+                    return;
+                }
 
-                if (!res.ok) return;
                 const data = await res.json();
                 if (!data.githubToken) return;
 
@@ -83,31 +100,42 @@ const CreateProject: React.FC = () => {
                 console.error("❌ Erreur GitHub :", err);
             }
         };
+
         fetchOrganizations();
-    }, [navigate]);
+    }, [token, logout]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem("jwtToken");
-            if (!token) {
-                alert("Vous devez être connecté");
-                return;
+            const isEditing = Boolean(editingProject?.id);
+            const method = isEditing ? "PUT" : "POST";
+            const url = isEditing
+                ? `${API_URL}/projects/${editingProject!.id}`
+                : `${API_URL}/projects`;
+
+            const body: any = {
+                name: projectName,
+                githubOrg,
+                minStudents,
+                maxStudents,
+                groupConvention,
+            };
+
+            if (!isEditing) {
+                body.uniqueKey = uniqueKey;
+                body.uniqueUrl = generatedUrl;
             }
 
-            const response = await fetch(`${API_URL}/projects`, {
-                method: "POST",
+            const response = await fetch(url, {
+                method,
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                    name: projectName,
-                    githubOrg,
-                    minStudents,
-                    maxStudents,
-                    groupConvention,
-                    uniqueKey,
-                    uniqueUrl: generatedUrl,
-                }),
+                body: JSON.stringify(body),
             });
+
+            if (response.status === 401) {
+                logout();
+                return;
+            }
 
             if (!response.ok) {
                 const err = await response.json();
@@ -116,10 +144,10 @@ const CreateProject: React.FC = () => {
             }
 
             const data = await response.json();
-            alert("Projet créé avec succès 🎉\nLien : " + data.uniqueUrl);
+            alert(isEditing ? "Projet mis à jour 🎉" : "Projet créé 🎉\nLien : " + data.uniqueUrl);
             navigate("/dashboard");
         } catch (err) {
-            console.error("❌ Erreur création projet :", err);
+            console.error("❌ Erreur création/mise à jour projet :", err);
         }
     };
 
@@ -136,15 +164,46 @@ const CreateProject: React.FC = () => {
         <div style={{ padding: "2rem" }}>
             <Card sx={{ maxWidth: 600, margin: "auto", p: 3 }}>
                 <CardContent>
-                    <Typography variant="h5" gutterBottom>Create Project</Typography>
+                    <Typography variant="h5" gutterBottom>
+                        {editingProject ? "Modifier le projet" : "Créer un projet"}
+                    </Typography>
                     <form style={{ display: "flex", flexDirection: "column", gap: "1rem" }} onSubmit={handleSubmit}>
-                        <TextField label="Project Name" value={projectName} onChange={(e) => setProjectName(e.target.value)} required />
-                        <TextField select label="GitHub Organization" value={githubOrg} onChange={(e) => setGithubOrg(e.target.value)} required>
-                            {organizations.map((org) => <MenuItem key={org} value={org}>{org}</MenuItem>)}
+                        <TextField
+                            label="Nom du projet"
+                            value={projectName}
+                            onChange={(e) => setProjectName(e.target.value)}
+                            required
+                        />
+                        <TextField
+                            select
+                            label="Organisation GitHub"
+                            value={githubOrg}
+                            onChange={(e) => setGithubOrg(e.target.value)}
+                            required
+                        >
+                            {organizations.map((org) => (
+                                <MenuItem key={org} value={org}>
+                                    {org}
+                                </MenuItem>
+                            ))}
                         </TextField>
                         <Grid container spacing={2}>
-                            <Grid item xs={6}><TextField type="number" label="Min Students" value={minStudents} onChange={(e) => setMinStudents(Number(e.target.value))} /></Grid>
-                            <Grid item xs={6}><TextField type="number" label="Max Students" value={maxStudents} onChange={(e) => setMaxStudents(Number(e.target.value))} /></Grid>
+                            <Grid item xs={6}>
+                                <TextField
+                                    type="number"
+                                    label="Min Students"
+                                    value={minStudents}
+                                    onChange={(e) => setMinStudents(Number(e.target.value))}
+                                />
+                            </Grid>
+                            <Grid item xs={6}>
+                                <TextField
+                                    type="number"
+                                    label="Max Students"
+                                    value={maxStudents}
+                                    onChange={(e) => setMaxStudents(Number(e.target.value))}
+                                />
+                            </Grid>
                         </Grid>
                         <TextField label="Group Convention" value={groupConvention} InputProps={{ readOnly: true }} />
                         <TextField
@@ -154,13 +213,17 @@ const CreateProject: React.FC = () => {
                                 readOnly: true,
                                 endAdornment: (
                                     <InputAdornment position="end">
-                                        <IconButton onClick={handleCopyUrl}><ContentCopyIcon /></IconButton>
+                                        <IconButton onClick={handleCopyUrl}>
+                                            <ContentCopyIcon />
+                                        </IconButton>
                                     </InputAdornment>
                                 ),
                             }}
                             helperText="Lien à partager avec les étudiants"
                         />
-                        <Button type="submit" variant="contained">Save Project</Button>
+                        <Button type="submit" variant="contained">
+                            {editingProject ? "Mettre à jour" : "Créer le projet"}
+                        </Button>
                     </form>
                 </CardContent>
             </Card>

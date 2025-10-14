@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { TextField, Button, Card, CardContent, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const LoginPage: React.FC = () => {
+    const { login } = useAuth(); // ✅ On récupère la fonction login depuis le contexte
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const navigate = useNavigate();
@@ -21,22 +23,23 @@ const LoginPage: React.FC = () => {
 
             if (!response.ok) {
                 console.error("Erreur login :", data.message);
+                alert("Échec de la connexion : " + data.message);
                 return;
             }
 
-            // 🔹 Stockage du JWT dans localStorage
-            localStorage.setItem("token", data.token);
-            console.log("✅ JWT stocké dans localStorage :", data.token);
+            // ✅ On stocke le token via le contexte
+            login(data.token);
 
-            // 🔹 Affiche le token GitHub reçu (si le backend le renvoie)
+            console.log("✅ JWT stocké via AuthContext :", data.token);
+
             if (data.githubToken) {
-                console.log("Token GitHub depuis DB :", data.githubToken);
+                console.log("🐙 Token GitHub depuis DB :", data.githubToken);
             }
 
-            // Redirection vers le dashboard
             navigate("/dashboard");
         } catch (err) {
             console.error("Erreur serveur :", err);
+            alert("Erreur lors de la connexion.");
         }
     };
 
@@ -53,6 +56,7 @@ const LoginPage: React.FC = () => {
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             fullWidth
+                            required
                         />
                         <TextField
                             label="Password"
@@ -60,6 +64,7 @@ const LoginPage: React.FC = () => {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             fullWidth
+                            required
                         />
                         <Button type="submit" variant="contained" color="primary" fullWidth>
                             Login

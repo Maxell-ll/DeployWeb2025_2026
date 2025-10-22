@@ -1,10 +1,16 @@
 import express from "express";
-import { getGroups, createGroup } from "../controllers/groupController";
+import {
+    getGroups,
+    createGroup,
+    getGroupsByProject,
+} from "../controllers/groupController";
 
 const router = express.Router();
 
-// ⚠️ On expose ces routes sans verifyToken, car elles sont publiques via uniqueKey
+router.get("/project/:projectId", getGroupsByProject);
+// Routes publiques
 router.get("/:projectId/:uniqueKey", getGroups);
 router.post("/:projectId/:uniqueKey", createGroup);
+
 
 export default router;

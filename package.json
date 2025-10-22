@@ -1,20 +1,13 @@
 {
-  "name": "projetweb2526",
-  "private": true,
+  "name": "projetweb",
   "version": "1.0.0",
-  "type": "module",
+  "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix client\" \"npm run dev --prefix server\"",
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "build": "npm run build --prefix client && npm run build --prefix server",
-    "install:all": "npm install --prefix client && npm install --prefix server",
-    "start": "npm run start --prefix server"
+    "start": "concurrently \"npm run start --prefix server\" \"npm run preview --prefix client\""
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
-  },
-  "dependencies": {
-    "@octokit/rest": "^22.0.0",
-    "@vitejs/plugin-react": "^5.0.4",
-    "vite": "^7.1.9"
+    "concurrently": "^8.2.0"
   }
 }

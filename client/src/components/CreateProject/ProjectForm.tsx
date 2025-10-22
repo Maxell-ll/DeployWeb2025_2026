@@ -11,10 +11,11 @@ import {
     IconButton,
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Octokit } from "@octokit/rest";
 import { useAuth } from "../../context/AuthContext";
 import { useProjects, Project } from "../../context/ProjectContext";
+import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const FRONT_URL = import.meta.env.FRONT_URL || window.location.origin;
@@ -43,12 +44,12 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
 
         const fetchNextId = async () => {
             try {
-                const res = await fetch(`${API_URL}/projects/next-id`, {
+                const res = await axios.get(`${API_URL}/projects/next-id`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                if (res.status === 401) return logout();
 
-                const data = await res.json();
+                const data = res.data;
+
                 const array = new Uint8Array(32);
                 crypto.getRandomValues(array);
                 const key = Array.from(array, (b) => b.toString(16).padStart(2, "0"))
@@ -57,7 +58,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
 
                 setUniqueKey(key);
                 setGeneratedUrl(`${FRONT_URL}/CreateGroups/${data.nextId}/${key}`);
-            } catch (err) {
+            } catch (err: any) {
+                if (err.response?.status === 401) return logout();
                 console.error("❌ Erreur récupération nextId :", err);
             }
         };
@@ -69,18 +71,18 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
     useEffect(() => {
         const fetchOrganizations = async () => {
             try {
-                const res = await fetch(`${API_URL}/users/github-token`, {
+                const res = await axios.get(`${API_URL}/users/github-token`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                if (res.status === 401) return logout();
 
-                const data = await res.json();
+                const data = res.data;
                 if (!data.githubToken) return;
 
                 const octokit = new Octokit({ auth: data.githubToken });
                 const orgsRes = await octokit.rest.orgs.listForAuthenticatedUser();
                 setOrganizations(orgsRes.data.map((org) => org.login));
-            } catch (err) {
+            } catch (err: any) {
+                if (err.response?.status === 401) return logout();
                 console.error("❌ Erreur GitHub :", err);
             }
         };
@@ -94,7 +96,6 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
 
         try {
             const isEditing = Boolean(editingProject?.id);
-            const method = isEditing ? "PUT" : "POST";
             const url = isEditing
                 ? `${API_URL}/projects/${editingProject!.id}`
                 : `${API_URL}/projects`;
@@ -112,30 +113,29 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
                 body.uniqueUrl = generatedUrl;
             }
 
-            const response = await fetch(url, {
-                method,
+            const res = await axios({
+                method: isEditing ? "put" : "post",
+                url,
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify(body),
+                data: body,
             });
-
-            if (response.status === 401) return logout();
-
-            if (!response.ok) {
-                const err = await response.json();
-                alert("Erreur : " + err.message);
-                return;
-            }
-
-            const data = await response.json();
 
             await fetchProjects(); // Actualiser la liste globale des projets
 
-            alert(isEditing ? "Projet mis à jour 🎉" : "Projet créé 🎉\nLien : " + data.uniqueUrl);
+            alert(
+                isEditing
+                    ? "Projet mis à jour 🎉"
+                    : `Projet créé 🎉\nLien : ${res.data.uniqueUrl}`
+            );
             navigate("/dashboard");
-        } catch (err) {
+        } catch (err: any) {
+            if (err.response?.status === 401) return logout();
+
+            const message = err.response?.data?.message || "Erreur inconnue";
+            alert("Erreur : " + message);
             console.error("❌ Erreur création/mise à jour projet :", err);
         }
     };

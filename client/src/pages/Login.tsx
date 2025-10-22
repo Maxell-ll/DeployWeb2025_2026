@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { TextField, Button, Card, CardContent, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 
 const LoginPage: React.FC = () => {
-    const { login } = useAuth(); // ✅ On récupère la fonction login depuis le contexte
+    const { login } = useAuth();
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const navigate = useNavigate();
@@ -13,23 +14,15 @@ const LoginPage: React.FC = () => {
         e.preventDefault();
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username, password }),
+            const res = await axios.post(`${import.meta.env.VITE_API_URL}/auth/login`, {
+                username,
+                password,
             });
 
-            const data = await response.json();
+            const data = res.data;
 
-            if (!response.ok) {
-                console.error("Erreur login :", data.message);
-                alert("Échec de la connexion : " + data.message);
-                return;
-            }
-
-            // ✅ On stocke le token via le contexte
+            // ✅ Stockage du token via le contexte
             login(data.token);
-
             console.log("✅ JWT stocké via AuthContext :", data.token);
 
             if (data.githubToken) {
@@ -37,20 +30,30 @@ const LoginPage: React.FC = () => {
             }
 
             navigate("/dashboard");
-        } catch (err) {
-            console.error("Erreur serveur :", err);
-            alert("Erreur lors de la connexion.");
+        } catch (err: any) {
+            console.error("❌ Erreur login :", err.response?.data || err.message);
+            alert(err.response?.data?.message || "Échec de la connexion. Vérifie tes identifiants.");
         }
     };
 
     return (
-        <div style={{ minHeight: "100vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
+        <div
+            style={{
+                minHeight: "100vh",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+            }}
+        >
             <Card sx={{ width: 400, p: 3, boxShadow: 3 }}>
                 <CardContent>
                     <Typography variant="h4" align="center" gutterBottom>
                         Project Hub
                     </Typography>
-                    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                    <form
+                        onSubmit={handleSubmit}
+                        style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+                    >
                         <TextField
                             label="Username"
                             value={username}

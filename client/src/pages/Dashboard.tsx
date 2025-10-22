@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, Typography, Button, Grid } from "@mui/material";
+import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 
 interface Project {
@@ -27,19 +28,18 @@ const Dashboard: React.FC = () => {
 
         const fetchProjects = async () => {
             try {
-                const res = await fetch(`${import.meta.env.VITE_API_URL}/projects`, {
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/projects`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                if (res.status === 401) {
+
+                setProjects(res.data);
+            } catch (err: any) {
+                if (err.response?.status === 401) {
                     logout();
                     return;
                 }
-                if (!res.ok) throw new Error("Erreur de chargement des projets");
-
-                const data = await res.json();
-                setProjects(data);
-            } catch (err) {
-                console.error("❌ Erreur :", err);
+                console.error("❌ Erreur récupération projets :", err.response?.data || err.message);
+                alert(err.response?.data?.message || "Erreur lors du chargement des projets.");
             }
         };
 
@@ -48,21 +48,17 @@ const Dashboard: React.FC = () => {
 
     const handleDelete = async (projectId: number) => {
         if (!confirm("Voulez-vous vraiment supprimer ce projet ?")) return;
+
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/projects/${projectId}`, {
-                method: "DELETE",
+            await axios.delete(`${import.meta.env.VITE_API_URL}/projects/${projectId}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
 
-            if (!res.ok) {
-                const err = await res.json();
-                return alert("Erreur : " + err.message);
-            }
-
-            alert("Projet supprimé ✅");
+            alert("✅ Projet supprimé avec succès !");
             setProjects((prev) => prev.filter((p) => p.id !== projectId));
-        } catch (err) {
-            console.error(err);
+        } catch (err: any) {
+            console.error("❌ Erreur suppression projet :", err.response?.data || err.message);
+            alert(err.response?.data?.message || "Erreur lors de la suppression du projet.");
         }
     };
 
@@ -95,9 +91,13 @@ const Dashboard: React.FC = () => {
                             <Card sx={{ cursor: "pointer" }}>
                                 <CardContent onClick={() => handleEdit(project)}>
                                     <Typography variant="h6">{project.name}</Typography>
-                                    <Typography variant="body2">Groupes : {project.groups.length}</Typography>
+                                    <Typography variant="body2">
+                                        Groupes : {project.groups.length}
+                                    </Typography>
                                 </CardContent>
-                                <CardContent sx={{ display: "flex", justifyContent: "flex-end", pt: 0 }}>
+                                <CardContent
+                                    sx={{ display: "flex", justifyContent: "flex-end", pt: 0 }}
+                                >
                                     <Button
                                         variant="outlined"
                                         color="error"

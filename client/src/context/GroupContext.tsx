@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
 import { useAuth } from "./AuthContext";
 import { Student } from "./StudentContext";
+import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
@@ -33,13 +34,13 @@ export const GroupProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             }
 
             try {
-                const res = await fetch(`${API_URL}/groups/project/${projectIdNumber}`, {
+                const res = await axios.get(`${API_URL}/groups/project/${projectIdNumber}`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
 
                 if (res.status === 401) return logout();
-                const data = await res.json();
 
+                const data = res.data;
                 if (!Array.isArray(data)) {
                     console.warn("Réponse inattendue pour fetchGroups :", data);
                     setGroups([]);
@@ -54,21 +55,21 @@ export const GroupProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         [token, logout]
     );
 
-
     const createGroup = useCallback(
         async (projectId: number, uniqueKey: string, students: Student[]) => {
             try {
-                const res = await fetch(`${API_URL}/groups/${projectId}/${uniqueKey}`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ students }),
-                });
-                if (!res.ok) throw new Error("Erreur lors de la création du groupe");
-                const data = await res.json();
-                setGroups((prev) => [...prev, data.group]);
+                const res = await axios.post(
+                    `${API_URL}/groups/${projectId}/${uniqueKey}`,
+                    { students },
+                    {
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+
+                setGroups((prev) => [...prev, res.data.group]);
             } catch (err) {
                 console.error("Erreur createGroup :", err);
             }

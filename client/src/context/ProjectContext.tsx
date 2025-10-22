@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import axios from "axios";
 import { useAuth } from "./AuthContext";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
@@ -27,40 +28,42 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     const { token, logout } = useAuth();
     const [projects, setProjects] = useState<Project[]>([]);
 
+    // 🔹 Récupération de tous les projets
     const fetchProjects = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/projects`, {
+            const res = await axios.get(`${API_URL}/projects`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
-            if (res.status === 401) return logout();
-            const data = await res.json();
-            setProjects(data);
-        } catch (err) {
+            setProjects(res.data);
+        } catch (err: any) {
+            if (err.response?.status === 401) logout();
             console.error("Erreur fetchProjects :", err);
         }
     }, [token, logout]);
 
-    const fetchProjectById = useCallback(async (projectId: number) => {
-        try {
-            const res = await fetch(`${API_URL}/projects/${projectId}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.status === 401) {
-                logout();
+    // 🔹 Récupération d’un projet spécifique
+    const fetchProjectById = useCallback(
+        async (projectId: number) => {
+            try {
+                const res = await axios.get(`${API_URL}/projects/${projectId}`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                return res.data;
+            } catch (err: any) {
+                if (err.response?.status === 401) logout();
+                console.error("Erreur fetchProjectById :", err);
                 return null;
             }
-            const data = await res.json();
-            return data;
-        } catch (err) {
-            console.error("Erreur fetchProjectById :", err);
-            return null;
-        }
-    }, [token, logout]);
+        },
+        [token, logout]
+    );
 
     const clearProjects = () => setProjects([]);
 
     return (
-        <ProjectContext.Provider value={{ projects, fetchProjects, fetchProjectById, clearProjects }}>
+        <ProjectContext.Provider
+            value={{ projects, fetchProjects, fetchProjectById, clearProjects }}
+        >
             {children}
         </ProjectContext.Provider>
     );
@@ -68,6 +71,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
 export const useProjects = () => {
     const context = useContext(ProjectContext);
-    if (!context) throw new Error("useProjects doit être utilisé à l'intérieur d'un ProjectProvider");
+    if (!context)
+        throw new Error("useProjects doit être utilisé à l'intérieur d'un ProjectProvider");
     return context;
 };

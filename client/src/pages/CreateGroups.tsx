@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { TextField, Button, Card, CardContent, Typography } from "@mui/material";
+import axios from "axios";
 import { useStudents } from "../context/StudentContext";
 import { useProjects } from "../context/ProjectContext";
 
@@ -14,11 +15,11 @@ interface ProjectPublic {
 export const CreateGroup: React.FC = () => {
     const { projectId, uniqueKey } = useParams<{ projectId: string; uniqueKey: string }>();
     const { students, setStudents, clearStudents } = useStudents();
-    const { projects, fetchProjects } = useProjects();
+    const { projects } = useProjects();
 
     const [project, setProject] = useState<ProjectPublic | null>(null);
 
-    // 🔹 Récupération du projet via le context si déjà chargé ou via l'API publique
+    // 🔹 Récupération du projet (via context ou API publique)
     useEffect(() => {
         const loadProject = async () => {
             if (!projectId || !uniqueKey) return;
@@ -36,29 +37,34 @@ export const CreateGroup: React.FC = () => {
                 return;
             }
 
-            // Sinon, fetch public
+            // Sinon, requête publique
             try {
-                const res = await fetch(`${import.meta.env.VITE_API_URL}/projects/public/${projectId}/${uniqueKey}`);
-                if (!res.ok) throw new Error("Projet non trouvé ou clé invalide");
-                const data = await res.json();
+                const res = await axios.get(
+                    `${import.meta.env.VITE_API_URL}/projects/public/${projectId}/${uniqueKey}`
+                );
+                const data = res.data;
                 setProject(data);
 
-                // Initialise les étudiants
                 setStudents(
                     Array.from({ length: data.minStudents }, () => ({
                         fullName: "",
                         githubUsername: "",
                     }))
                 );
-            } catch (err) {
-                console.error("Erreur récupération projet :", err);
+            } catch (err: any) {
+                console.error("❌ Erreur récupération projet :", err.response?.data || err.message);
+                alert(err.response?.data?.message || "Erreur lors du chargement du projet.");
             }
         };
 
         loadProject();
     }, [projectId, uniqueKey, projects, setStudents]);
 
-    const handleStudentChange = (index: number, field: "fullName" | "githubUsername", value: string) => {
+    const handleStudentChange = (
+        index: number,
+        field: "fullName" | "githubUsername",
+        value: string
+    ) => {
         const updated = [...students];
         updated[index][field] = value;
         setStudents(updated);
@@ -82,37 +88,30 @@ export const CreateGroup: React.FC = () => {
         setStudents(students.filter((_, i) => i !== index));
     };
 
+    // 🔹 Soumission du groupe
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!projectId || !uniqueKey) return;
 
         try {
-            const response = await fetch(
+            const res = await axios.post(
                 `${import.meta.env.VITE_API_URL}/groups/${projectId}/${uniqueKey}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ students }),
-                }
+                { students },
+                { headers: { "Content-Type": "application/json" } }
             );
 
-            if (!response.ok) {
-                const data = await response.json();
-                console.error("Erreur création groupes :", data.message);
-                alert(data.message || "Erreur lors de la création du groupe.");
-                return;
-            }
-
-            alert("Groupe créé avec succès !");
-            if (project)
+            alert("✅ Groupe créé avec succès !");
+            if (project) {
                 setStudents(
                     Array.from({ length: project.minStudents }, () => ({
                         fullName: "",
                         githubUsername: "",
                     }))
                 );
-        } catch (err) {
-            console.error("Erreur serveur :", err);
+            }
+        } catch (err: any) {
+            console.error("❌ Erreur création groupe :", err.response?.data || err.message);
+            alert(err.response?.data?.message || "Erreur lors de la création du groupe.");
         }
     };
 
@@ -145,14 +144,18 @@ export const CreateGroup: React.FC = () => {
                                 <TextField
                                     label="Nom complet"
                                     value={student.fullName}
-                                    onChange={(e) => handleStudentChange(index, "fullName", e.target.value)}
+                                    onChange={(e) =>
+                                        handleStudentChange(index, "fullName", e.target.value)
+                                    }
                                     fullWidth
                                     sx={{ mt: 1 }}
                                 />
                                 <TextField
                                     label="Pseudo GitHub"
                                     value={student.githubUsername}
-                                    onChange={(e) => handleStudentChange(index, "githubUsername", e.target.value)}
+                                    onChange={(e) =>
+                                        handleStudentChange(index, "githubUsername", e.target.value)
+                                    }
                                     fullWidth
                                     sx={{ mt: 1 }}
                                 />

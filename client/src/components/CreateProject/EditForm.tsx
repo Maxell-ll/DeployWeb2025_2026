@@ -17,57 +17,26 @@ import { useAuth } from "../../context/AuthContext";
 import { useProjects, Project } from "../../context/ProjectContext";
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-const FRONT_URL = import.meta.env.FRONT_URL || window.location.origin;
+const API_URL = import.meta.env.VITE_API_URL;
 
-interface ProjectFormProps {
-    editingProject?: Project;
+interface EditFormProps {
+    editingProject: Project;
 }
 
-const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
+const EditForm: React.FC<EditFormProps> = ({ editingProject }) => {
     const { token, logout } = useAuth();
     const { fetchProjects } = useProjects();
     const navigate = useNavigate();
 
-    const [projectName, setProjectName] = useState(editingProject?.name || "");
-    const [githubOrg, setGithubOrg] = useState(editingProject?.githubOrg || "");
+    const [projectName, setProjectName] = useState(editingProject.name);
+    const [githubOrg, setGithubOrg] = useState(editingProject.githubOrg);
     const [organizations, setOrganizations] = useState<string[]>([]);
-    const [minStudents, setMinStudents] = useState(editingProject?.minStudents || 1);
-    const [maxStudents, setMaxStudents] = useState(editingProject?.maxStudents || 1);
-    const [groupConvention] = useState(editingProject?.groupConvention || "Groupe-XX");
-    const [generatedUrl, setGeneratedUrl] = useState(editingProject?.uniqueUrl || "");
-    const [uniqueKey, setUniqueKey] = useState(editingProject?.uniqueKey || "");
+    const [minStudents, setMinStudents] = useState(editingProject.minStudents);
+    const [maxStudents, setMaxStudents] = useState(editingProject.maxStudents);
+    const [groupConvention, setGroupConvention] = useState(editingProject.groupConvention);
+    const [generatedUrl] = useState(editingProject.uniqueUrl || "");
 
-    // 🔹 Génération URL & clé uniquement si création
-    useEffect(() => {
-        if (editingProject) return;
-
-        const fetchNextId = async () => {
-            try {
-                const res = await axios.get(`${API_URL}/projects/next-id`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-
-                const data = res.data;
-
-                const array = new Uint8Array(32);
-                crypto.getRandomValues(array);
-                const key = Array.from(array, (b) => b.toString(16).padStart(2, "0"))
-                    .join("")
-                    .slice(0, 50);
-
-                setUniqueKey(key);
-                setGeneratedUrl(`${FRONT_URL}/CreateGroups/${data.nextId}/${key}`);
-            } catch (err: any) {
-                if (err.response?.status === 401) return logout();
-                console.error("❌ Erreur récupération nextId :", err);
-            }
-        };
-
-        fetchNextId();
-    }, [editingProject, token, logout]);
-
-    // 🔹 Fetch des organisations GitHub
+    // 🔹 Récupération des organisations GitHub
     useEffect(() => {
         const fetchOrganizations = async () => {
             try {
@@ -90,53 +59,30 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
         fetchOrganizations();
     }, [token, logout]);
 
-    // 🔹 Soumission formulaire
+    // 🔹 Mise à jour du projet
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         try {
-            const isEditing = Boolean(editingProject?.id);
-            const url = isEditing
-                ? `${API_URL}/projects/${editingProject!.id}`
-                : `${API_URL}/projects`;
-
-            const body: any = {
-                name: projectName,
-                githubOrg,
-                minStudents,
-                maxStudents,
-                groupConvention,
-            };
-
-            if (!isEditing) {
-                body.uniqueKey = uniqueKey;
-                body.uniqueUrl = generatedUrl;
-            }
-
-            const res = await axios({
-                method: isEditing ? "put" : "post",
-                url,
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                data: body,
-            });
-
-            await fetchProjects(); // Actualiser la liste globale des projets
-
-            alert(
-                isEditing
-                    ? "Projet mis à jour 🎉"
-                    : `Projet créé 🎉\nLien : ${res.data.uniqueUrl}`
+            await axios.put(
+                `${API_URL}/projects/${editingProject.id}`,
+                { name: projectName, githubOrg, minStudents, maxStudents, groupConvention },
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
             );
+
+            await fetchProjects();
+            alert("Projet mis à jour 🎉");
             navigate("/dashboard");
         } catch (err: any) {
             if (err.response?.status === 401) return logout();
-
             const message = err.response?.data?.message || "Erreur inconnue";
             alert("Erreur : " + message);
-            console.error("❌ Erreur création/mise à jour projet :", err);
+            console.error("❌ Erreur mise à jour projet :", err);
         }
     };
 
@@ -153,13 +99,10 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
         <Card sx={{ maxWidth: 600, margin: "auto", p: 3 }}>
             <CardContent>
                 <Typography variant="h5" gutterBottom>
-                    {editingProject ? "Modifier le projet" : "Créer un projet"}
+                    Modifier le projet
                 </Typography>
 
-                <form
-                    onSubmit={handleSubmit}
-                    style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-                >
+                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                     <TextField
                         label="Nom du projet"
                         value={projectName}
@@ -206,27 +149,30 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
                     <TextField
                         label="Group Convention"
                         value={groupConvention}
-                        InputProps={{ readOnly: true }}
+                        onChange={(e) => setGroupConvention(e.target.value)}
+                        required
                     />
 
-                    <TextField
-                        label="Project Access URL"
-                        value={generatedUrl}
-                        InputProps={{
-                            readOnly: true,
-                            endAdornment: (
-                                <InputAdornment position="end">
-                                    <IconButton onClick={handleCopyUrl}>
-                                        <ContentCopyIcon />
-                                    </IconButton>
-                                </InputAdornment>
-                            ),
-                        }}
-                        helperText="Lien à partager avec les étudiants"
-                    />
+                    {generatedUrl && (
+                        <TextField
+                            label="Project Access URL"
+                            value={generatedUrl}
+                            InputProps={{
+                                readOnly: true,
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton onClick={handleCopyUrl}>
+                                            <ContentCopyIcon />
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                            }}
+                            helperText="Lien d'accès au projet"
+                        />
+                    )}
 
                     <Button type="submit" variant="contained">
-                        {editingProject ? "Mettre à jour" : "Créer le projet"}
+                        Mettre à jour
                     </Button>
                 </form>
             </CardContent>
@@ -234,4 +180,4 @@ const ProjectForm: React.FC<ProjectFormProps> = ({ editingProject }) => {
     );
 };
 
-export default ProjectForm;
+export default EditForm;

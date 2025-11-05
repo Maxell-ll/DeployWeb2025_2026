@@ -1,6 +1,6 @@
-// projectController.ts
 import { Request, Response } from "express";
 import prisma from "../prisma/client";
+import crypto from "crypto";
 
 // 🔹 Récupérer tous les projets de l'utilisateur
 export const getUserProjects = async (req: Request, res: Response) => {
@@ -17,30 +17,20 @@ export const getUserProjects = async (req: Request, res: Response) => {
     }
 };
 
-// 🔹 Récupérer le prochain ID de projet
-export const getNextProjectId = async (req: Request, res: Response) => {
-    try {
-        const lastProject = await prisma.project.findFirst({
-            orderBy: { id: "desc" },
-        });
-        const nextId = (lastProject?.id || 0) + 1;
-        res.status(200).json({ nextId });
-    } catch (err) {
-        console.error("❌ Erreur getNextProjectId:", err);
-        res.status(500).json({ message: "Erreur serveur" });
-    }
-};
-
-// 🔹 Créer un projet
+// 🔹 Créer un projet (avec génération automatique de la clé et de l’URL)
 export const createProject = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
-        const { name, githubOrg, minStudents, maxStudents, groupConvention, uniqueKey, uniqueUrl } = req.body;
+        const { name, githubOrg, minStudents, maxStudents, groupConvention } = req.body;
 
-        if (!name || !githubOrg || !uniqueKey || !uniqueUrl) {
+        if (!name || !githubOrg) {
             return res.status(400).json({ message: "Champs obligatoires manquants" });
         }
 
+        // 1️⃣ Générer une clé unique
+        const uniqueKey = crypto.randomBytes(25).toString("hex");
+
+        // 2️⃣ Créer le projet (sans URL pour l’instant)
         const project = await prisma.project.create({
             data: {
                 name,
@@ -48,17 +38,30 @@ export const createProject = async (req: Request, res: Response) => {
                 minStudents,
                 maxStudents,
                 groupConvention,
+                uniqueKey,
+                uniqueUrl: "", // temporairement vide
                 userId,
-                uniqueUrl,
             },
         });
 
-        res.status(201).json(project);
+        // 3️⃣ Construire maintenant l’URL complète avec l’ID du projet
+        const baseUrl = process.env.FRONT_URL || "http://localhost:5173";
+        const uniqueUrl = `${baseUrl}/CreateGroups/${project.id}/${uniqueKey}`;
+
+        // 4️⃣ Mettre à jour le projet avec l’URL finale
+        const updatedProject = await prisma.project.update({
+            where: { id: project.id },
+            data: { uniqueUrl },
+        });
+
+        // 5️⃣ Renvoyer le projet complet avec l’URL finale
+        res.status(201).json(updatedProject);
     } catch (err) {
         console.error("❌ Erreur lors de la création du projet :", err);
         res.status(500).json({ message: "Erreur serveur", error: err });
     }
 };
+
 
 // 🔹 Mettre à jour un projet existant
 export const updateProject = async (req: Request, res: Response) => {
@@ -69,10 +72,7 @@ export const updateProject = async (req: Request, res: Response) => {
 
         const project = await prisma.project.findUnique({ where: { id: projectId } });
         if (!project) return res.status(404).json({ message: "Projet non trouvé" });
-
-        if (project.userId !== userId) {
-            return res.status(403).json({ message: "Non autorisé à modifier ce projet" });
-        }
+        if (project.userId !== userId) return res.status(403).json({ message: "Non autorisé à modifier ce projet" });
 
         const updatedProject = await prisma.project.update({
             where: { id: projectId },
@@ -86,6 +86,7 @@ export const updateProject = async (req: Request, res: Response) => {
     }
 };
 
+// 🔹 Supprimer un projet
 export const deleteProject = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.id;
@@ -103,7 +104,6 @@ export const deleteProject = async (req: Request, res: Response) => {
     }
 };
 
-
 // 🔹 Récupérer un projet public via ID et clé
 export const getProjectPublic = async (req: Request, res: Response) => {
     try {
@@ -115,7 +115,7 @@ export const getProjectPublic = async (req: Request, res: Response) => {
         });
 
         if (!project) return res.status(404).json({ message: "Projet non trouvé" });
-        if (!project.uniqueUrl?.includes(uniqueKey)) return res.status(403).json({ message: "Clé invalide" });
+        if (project.uniqueKey !== uniqueKey) return res.status(403).json({ message: "Clé invalide" });
 
         res.json(project);
     } catch (err) {

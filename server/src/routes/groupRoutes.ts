@@ -4,10 +4,11 @@ import {
     createGroup,
     getGroupsByProject,
 } from "../controllers/groupController";
+import {verifyToken} from "../middlewares/authMiddleware";
 
 const router = express.Router();
 
-router.get("/project/:projectId", getGroupsByProject);
+router.get("/project/:projectId", verifyToken,getGroupsByProject);
 // Routes publiques
 router.get("/:projectId/:uniqueKey", getGroups);
 router.post("/:projectId/:uniqueKey", createGroup);

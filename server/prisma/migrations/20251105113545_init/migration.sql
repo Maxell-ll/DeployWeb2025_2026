@@ -18,9 +18,11 @@ CREATE TABLE `Project` (
     `maxStudents` INTEGER NOT NULL,
     `groupConvention` VARCHAR(191) NOT NULL,
     `uniqueUrl` VARCHAR(191) NOT NULL,
+    `uniqueKey` VARCHAR(191) NOT NULL,
     `userId` INTEGER NOT NULL,
 
     UNIQUE INDEX `Project_uniqueUrl_key`(`uniqueUrl`),
+    UNIQUE INDEX `Project_uniqueKey_key`(`uniqueKey`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

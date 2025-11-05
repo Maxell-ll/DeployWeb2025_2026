@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode } fr
 import axios from "axios";
 import { useAuth } from "./AuthContext";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export interface Project {
     id: number;
@@ -11,9 +11,11 @@ export interface Project {
     minStudents: number;
     maxStudents: number;
     groupConvention: string;
-    uniqueUrl: string;
-    uniqueKey: string;
+    userId: number;
+    uniqueKey?: string;     // ✅ ajouté
+    uniqueUrl?: string;     // ✅ ajouté
 }
+
 
 interface ProjectContextType {
     projects: Project[];

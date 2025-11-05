@@ -23,6 +23,7 @@ model Project {
   maxStudents     Int
   groupConvention String
   uniqueUrl       String  @unique
+  uniqueKey       String  @unique
   userId          Int
   user            User    @relation(fields: [userId], references: [id])
   groups          Group[]

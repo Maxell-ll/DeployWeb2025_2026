@@ -1,6 +1,11 @@
 // src/controllers/groupController.ts
 import { Request, Response } from "express";
 import prisma from "../prisma/client";
+import { Octokit } from "@octokit/rest";
+
+const octokit = new Octokit({
+    auth: process.env.GITHUB_TOKEN, // optionnel, mais conseillé
+});
 
 // 🔹 GET /groups/:projectId/:uniqueKey
 export const getGroups = async (req: Request, res: Response) => {
@@ -22,7 +27,8 @@ export const getGroups = async (req: Request, res: Response) => {
         });
 
         if (!project) return res.status(404).json({ message: "Projet non trouvé" });
-        if (!project.uniqueUrl?.includes(uniqueKey)) return res.status(403).json({ message: "Clé invalide" });
+        if (!project.uniqueUrl?.includes(uniqueKey))
+            return res.status(403).json({ message: "Clé invalide" });
 
         res.json(project.groups);
     } catch (err) {
@@ -54,6 +60,22 @@ export const createGroup = async (req: Request, res: Response) => {
             return res.status(403).json({ message: "Projet non trouvé ou clé invalide" });
         }
 
+        // 🧠 Vérification GitHub des étudiants
+        for (const s of students) {
+            try {
+                await octokit.users.getByUsername({ username: s.githubUsername });
+            } catch (error: any) {
+                if (error.status === 404) {
+                    return res
+                        .status(400)
+                        .json({ message: `Le compte GitHub "${s.githubUsername}" n'existe pas.` });
+                }
+                console.error("Erreur lors de la vérification GitHub :", error);
+                return res.status(500).json({ message: "Erreur lors de la vérification GitHub" });
+            }
+        }
+
+        // ✅ Tous les comptes GitHub existent, on crée le groupe
         const group = await prisma.group.create({
             data: {
                 name: `Groupe du projet ${project.name}`,
@@ -94,7 +116,7 @@ export const getGroupsByProject = async (req: Request, res: Response) => {
             include: { students: true },
         });
 
-        res.json(groups); // renvoie un tableau vide si aucun groupe
+        res.json(groups);
     } catch (err) {
         console.error("Erreur récupération groupes :", err);
         res.status(500).json({ message: "Erreur serveur" });

@@ -1,5 +1,5 @@
 datasource db {
-  provider = "mysql" // ou "postgresql" selon ta DB
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -25,7 +25,7 @@ model Project {
   uniqueUrl       String  @unique
   uniqueKey       String  @unique
   userId          Int
-  user            User    @relation(fields: [userId], references: [id])
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   groups          Group[]
 }
 
@@ -33,7 +33,7 @@ model Group {
   id        Int       @id @default(autoincrement())
   name      String
   projectId Int
-  project   Project   @relation(fields: [projectId], references: [id])
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   students  Student[]
 }
 
@@ -42,5 +42,5 @@ model Student {
   fullName       String
   githubUsername String
   groupId        Int
-  group          Group  @relation(fields: [groupId], references: [id])
+  group          Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
 }

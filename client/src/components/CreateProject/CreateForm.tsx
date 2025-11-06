@@ -26,7 +26,7 @@ const CreateForm: React.FC = () => {
     const [organizations, setOrganizations] = useState<string[]>([]);
     const [minStudents, setMinStudents] = useState(1);
     const [maxStudents, setMaxStudents] = useState(1);
-    const [groupConvention] = useState("Groupe-XX");
+    const [groupConvention, setGroupConvention] = useState("Groupe-XX");
 
     // 🔹 Récupérer les organisations GitHub
     useEffect(() => {
@@ -144,10 +144,13 @@ const CreateForm: React.FC = () => {
                     </Grid>
 
                     <TextField
-                        label="Group Convention"
+                        label="Convention de nommage des groupes"
                         value={groupConvention}
-                        InputProps={{ readOnly: true }}
+                        onChange={(e) => setGroupConvention(e.target.value)}
+                        helperText='Utilise "XX" comme numéro variable (ex: Groupe-XX, Team_XX, etc.)'
+                        required
                     />
+
 
                     <Button type="submit" variant="contained">
                         Créer le projet

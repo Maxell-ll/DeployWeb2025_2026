@@ -38,6 +38,7 @@ export const getGroups = async (req: Request, res: Response) => {
 };
 
 // 🔹 POST /groups/:projectId/:uniqueKey
+// 🔹 POST /groups/:projectId/:uniqueKey
 export const createGroup = async (req: Request, res: Response) => {
     const { projectId, uniqueKey } = req.params;
     const { students } = req.body;
@@ -54,6 +55,7 @@ export const createGroup = async (req: Request, res: Response) => {
     try {
         const project = await prisma.project.findUnique({
             where: { id: projectIdNumber },
+            include: { groups: true },
         });
 
         if (!project || !project.uniqueUrl.includes(uniqueKey)) {
@@ -75,10 +77,15 @@ export const createGroup = async (req: Request, res: Response) => {
             }
         }
 
-        // ✅ Tous les comptes GitHub existent, on crée le groupe
+        // 🧩 Génération du nom de groupe selon la convention
+        const existingCount = project.groups.length;
+        const nextNumber = (existingCount + 1).toString().padStart(2, "0"); // 01, 02, 03...
+        const groupName = project.groupConvention.replace("XX", nextNumber);
+
+        // ✅ Création du groupe avec le nom formaté
         const group = await prisma.group.create({
             data: {
-                name: `Groupe du projet ${project.name}`,
+                name: groupName,
                 projectId: projectIdNumber,
                 students: {
                     create: students.map((s: any) => ({
@@ -90,12 +97,16 @@ export const createGroup = async (req: Request, res: Response) => {
             include: { students: true },
         });
 
-        res.status(201).json({ message: "Groupe créé", group });
+        res.status(201).json({
+            message: `Groupe "${groupName}" créé avec succès`,
+            group,
+        });
     } catch (err) {
         console.error("Erreur création groupe :", err);
         res.status(500).json({ message: "Erreur serveur", error: err });
     }
 };
+
 
 // 🔹 GET /groups/project/:projectId
 export const getGroupsByProject = async (req: Request, res: Response) => {

@@ -3,10 +3,6 @@ import { Request, Response } from "express";
 import prisma from "../prisma/client";
 import { Octokit } from "@octokit/rest";
 
-const octokit = new Octokit({
-    auth: process.env.GITHUB_TOKEN, // optionnel, mais conseillé
-});
-
 // 🔹 GET /groups/:projectId/:uniqueKey
 export const getGroups = async (req: Request, res: Response) => {
     const { projectId, uniqueKey } = req.params;
@@ -38,12 +34,11 @@ export const getGroups = async (req: Request, res: Response) => {
 };
 
 // 🔹 POST /groups/:projectId/:uniqueKey
-// 🔹 POST /groups/:projectId/:uniqueKey
 export const createGroup = async (req: Request, res: Response) => {
     const { projectId, uniqueKey } = req.params;
     const { students } = req.body;
 
-    if (!projectId || !uniqueKey || !students || !Array.isArray(students)) {
+    if (!projectId || !uniqueKey || !Array.isArray(students)) {
         return res.status(400).json({ message: "Données manquantes ou invalides" });
     }
 
@@ -53,16 +48,24 @@ export const createGroup = async (req: Request, res: Response) => {
     }
 
     try {
+        // 🔹 Récupère le projet et le prof
         const project = await prisma.project.findUnique({
             where: { id: projectIdNumber },
-            include: { groups: true },
+            include: { user: true, groups: true },
         });
 
         if (!project || !project.uniqueUrl.includes(uniqueKey)) {
             return res.status(403).json({ message: "Projet non trouvé ou clé invalide" });
         }
 
-        // 🧠 Vérification GitHub des étudiants
+        const prof = project.user;
+        if (!prof.githubToken) {
+            return res.status(400).json({ message: "Le professeur n’a pas de token GitHub valide." });
+        }
+
+        const octokit = new Octokit({ auth: prof.githubToken });
+
+        // 🔹 Vérification GitHub des étudiants
         for (const s of students) {
             try {
                 await octokit.users.getByUsername({ username: s.githubUsername });
@@ -77,12 +80,12 @@ export const createGroup = async (req: Request, res: Response) => {
             }
         }
 
-        // 🧩 Génération du nom de groupe selon la convention
+        // 🔹 Génération du nom de groupe selon la convention
         const existingCount = project.groups.length;
-        const nextNumber = (existingCount + 1).toString().padStart(2, "0"); // 01, 02, 03...
+        const nextNumber = (existingCount + 1).toString().padStart(2, "0");
         const groupName = project.groupConvention.replace("XX", nextNumber);
 
-        // ✅ Création du groupe avec le nom formaté
+        // 🔹 Création du groupe en base
         const group = await prisma.group.create({
             data: {
                 name: groupName,
@@ -97,16 +100,45 @@ export const createGroup = async (req: Request, res: Response) => {
             include: { students: true },
         });
 
+        // 🔹 Création du repo GitHub dans l’organisation du projet
+        const org = project.githubOrg;
+        try {
+            await octokit.repos.createInOrg({
+                org,
+                name: groupName,
+                private: true,
+                description: `Repository pour le groupe ${groupName} du projet ${project.name}`,
+            });
+        } catch (err: any) {
+            console.error("⚠️ Erreur création repo :", err);
+            return res.status(500).json({ message: "Erreur lors de la création du dépôt GitHub" });
+        }
+
+        // 🔹 Ajout des étudiants comme collaborateurs (permission push)
+        for (const student of group.students) {
+            if (!student.githubUsername) continue;
+            try {
+                await octokit.repos.addCollaborator({
+                    owner: org,
+                    repo: groupName,
+                    username: student.githubUsername,
+                    permission: "push",
+                });
+            } catch (err) {
+                console.warn(`⚠️ Impossible d’ajouter ${student.githubUsername} :`, err);
+            }
+        }
+
+        // ✅ Le prof est déjà admin du repo car il le crée via son token
         res.status(201).json({
-            message: `Groupe "${groupName}" créé avec succès`,
+            message: `Groupe "${groupName}" créé et dépôt GitHub associé`,
             group,
         });
     } catch (err) {
-        console.error("Erreur création groupe :", err);
+        console.error("❌ Erreur création groupe :", err);
         res.status(500).json({ message: "Erreur serveur", error: err });
     }
 };
-
 
 // 🔹 GET /groups/project/:projectId
 export const getGroupsByProject = async (req: Request, res: Response) => {

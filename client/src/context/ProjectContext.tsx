@@ -12,10 +12,9 @@ export interface Project {
     maxStudents: number;
     groupConvention: string;
     userId: number;
-    uniqueKey?: string;     // ✅ ajouté
-    uniqueUrl?: string;     // ✅ ajouté
+    uniqueKey?: string;
+    uniqueUrl?: string;
 }
-
 
 interface ProjectContextType {
     projects: Project[];
@@ -27,37 +26,62 @@ interface ProjectContextType {
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { token, logout } = useAuth();
+    const { token, csrfToken, logout } = useAuth();
     const [projects, setProjects] = useState<Project[]>([]);
 
     // 🔹 Récupération de tous les projets
     const fetchProjects = useCallback(async () => {
         try {
             const res = await axios.get(`${API_URL}/projects`, {
-                headers: { Authorization: `Bearer ${token}` },
+                withCredentials: true,
+                headers: {
+                    Authorization: token ? `Bearer ${token}` : "",
+                    "X-CSRF-Token": csrfToken || "",
+                },
             });
-            setProjects(res.data);
+
+            if (res.status === 401) {
+                logout();
+                return;
+            }
+
+            if (Array.isArray(res.data)) {
+                setProjects(res.data);
+            } else {
+                console.warn("Réponse inattendue pour fetchProjects :", res.data);
+                setProjects([]);
+            }
         } catch (err: any) {
-            if (err.response?.status === 401) logout();
             console.error("Erreur fetchProjects :", err);
+            if (err.response?.status === 401) logout();
         }
-    }, [token, logout]);
+    }, [token, csrfToken, logout]);
 
     // 🔹 Récupération d’un projet spécifique
     const fetchProjectById = useCallback(
         async (projectId: number) => {
             try {
                 const res = await axios.get(`${API_URL}/projects/${projectId}`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                    withCredentials: true,
+                    headers: {
+                        Authorization: token ? `Bearer ${token}` : "",
+                        "X-CSRF-Token": csrfToken || "",
+                    },
                 });
+
+                if (res.status === 401) {
+                    logout();
+                    return null;
+                }
+
                 return res.data;
             } catch (err: any) {
-                if (err.response?.status === 401) logout();
                 console.error("Erreur fetchProjectById :", err);
+                if (err.response?.status === 401) logout();
                 return null;
             }
         },
-        [token, logout]
+        [token, csrfToken, logout]
     );
 
     const clearProjects = () => setProjects([]);

@@ -23,8 +23,8 @@ const GroupList: React.FC<GroupListProps> = ({ projectId, minStudents, maxStuden
     const { groups, fetchGroups, clearGroups } = useGroups();
     const [loading, setLoading] = useState(false);
 
+    // 🔹 Chargement des groupes
     useEffect(() => {
-        // ✅ On vérifie que projectId est bien un nombre valide
         if (!projectId || isNaN(Number(projectId))) {
             console.warn("projectId invalide ou manquant :", projectId);
             return;
@@ -33,9 +33,9 @@ const GroupList: React.FC<GroupListProps> = ({ projectId, minStudents, maxStuden
         const loadGroups = async () => {
             setLoading(true);
             try {
-                await fetchGroups(Number(projectId)); // ✅ conversion sûre ici
+                await fetchGroups(Number(projectId));
             } catch (err) {
-                console.error("Erreur récupération groupes :", err);
+                console.error("❌ Erreur récupération groupes :", err);
             } finally {
                 setLoading(false);
             }
@@ -44,10 +44,8 @@ const GroupList: React.FC<GroupListProps> = ({ projectId, minStudents, maxStuden
         loadGroups();
 
         return () => clearGroups();
-    }, [projectId, fetchGroups]);
+    }, [projectId]); // ✅ plus de dépendances instables
 
-
-    // si pas de projectId (création), on n'affiche rien
     if (!projectId) return null;
 
     if (loading) {
@@ -66,7 +64,9 @@ const GroupList: React.FC<GroupListProps> = ({ projectId, minStudents, maxStuden
                 </Typography>
 
                 {!Array.isArray(groups) || groups.length === 0 ? (
-                    <Typography color="text.secondary">Aucun groupe n’a encore été créé.</Typography>
+                    <Typography color="text.secondary">
+                        Aucun groupe n’a encore été créé.
+                    </Typography>
                 ) : (
                     <Grid container spacing={2}>
                         {groups.map((group) => {
@@ -83,13 +83,16 @@ const GroupList: React.FC<GroupListProps> = ({ projectId, minStudents, maxStuden
                                             color: full ? "white" : "text.primary",
                                         }}
                                     >
-
-                                    <CardContent>
+                                        <CardContent>
                                             <Typography variant="h6" gutterBottom>
                                                 {group.name}
                                             </Typography>
 
-                                            <Typography variant="body2" color="text.secondary" gutterBottom>
+                                            <Typography
+                                                variant="body2"
+                                                color="text.secondary"
+                                                gutterBottom
+                                            >
                                                 Étudiants : {current}/{maxStudents}
                                                 {current < minStudents && (
                                                     <span style={{ color: "#f44336" }}>

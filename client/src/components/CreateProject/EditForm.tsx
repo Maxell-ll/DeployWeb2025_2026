@@ -12,7 +12,6 @@ import {
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { useNavigate } from "react-router-dom";
-import { Octokit } from "@octokit/rest";
 import { useAuth } from "../../context/AuthContext";
 import { useProjects, Project } from "../../context/ProjectContext";
 import axios from "axios";
@@ -28,6 +27,7 @@ const EditForm: React.FC<EditFormProps> = ({ editingProject }) => {
     const { fetchProjects } = useProjects();
     const navigate = useNavigate();
 
+    const [csrfToken, setCsrfToken] = useState("");
     const [projectName, setProjectName] = useState(editingProject.name);
     const [githubOrg, setGithubOrg] = useState(editingProject.githubOrg);
     const [organizations, setOrganizations] = useState<string[]>([]);
@@ -36,33 +36,39 @@ const EditForm: React.FC<EditFormProps> = ({ editingProject }) => {
     const [groupConvention, setGroupConvention] = useState(editingProject.groupConvention);
     const [generatedUrl] = useState(editingProject.uniqueUrl || "");
 
-    // 🔹 Récupération des organisations GitHub
+    // 🔹 Récupération du token CSRF
+    useEffect(() => {
+        const fetchCsrfToken = async () => {
+            try {
+                const res = await axios.get(`${API_URL.replace("/api", "")}/api/csrf-token`, {
+                    withCredentials: true,
+                });
+                setCsrfToken(res.data.csrfToken);
+            } catch (err) {
+                console.error("❌ Erreur lors de la récupération du CSRF token :", err);
+            }
+        };
+        fetchCsrfToken();
+    }, []);
+
+    // 🔹 Récupération des organisations GitHub depuis le backend
     useEffect(() => {
         const fetchOrganizations = async () => {
             try {
-                const res = await axios.get(`${API_URL}/users/github-token`, {
+                const res = await axios.get(`${API_URL}/users/github-orgs`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-
-                const data = res.data;
-                if (!data.githubToken) return;
-
-                const octokit = new Octokit({ auth: data.githubToken });
-                const orgsRes = await octokit.rest.orgs.listForAuthenticatedUser();
-                setOrganizations(orgsRes.data.map((org) => org.login));
+                setOrganizations(res.data.organizations || []);
             } catch (err: any) {
                 if (err.response?.status === 401) return logout();
-                console.error("❌ Erreur GitHub :", err);
+                console.error("❌ Erreur récupération organisations GitHub :", err);
             }
         };
-
         fetchOrganizations();
     }, [token, logout]);
 
-    // 🔹 Mise à jour du projet
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
         try {
             await axios.put(
                 `${API_URL}/projects/${editingProject.id}`,
@@ -71,10 +77,11 @@ const EditForm: React.FC<EditFormProps> = ({ editingProject }) => {
                     headers: {
                         "Content-Type": "application/json",
                         Authorization: `Bearer ${token}`,
+                        "X-CSRF-Token": csrfToken,
                     },
+                    withCredentials: true,
                 }
             );
-
             await fetchProjects();
             alert("Projet mis à jour 🎉");
             navigate("/dashboard");
@@ -102,7 +109,10 @@ const EditForm: React.FC<EditFormProps> = ({ editingProject }) => {
                     Modifier le projet
                 </Typography>
 
-                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <form
+                    onSubmit={handleSubmit}
+                    style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+                >
                     <TextField
                         label="Nom du projet"
                         value={projectName}
@@ -147,7 +157,7 @@ const EditForm: React.FC<EditFormProps> = ({ editingProject }) => {
                     </Grid>
 
                     <TextField
-                        label="Group Convention"
+                        label="Convention de nommage des groupes"
                         value={groupConvention}
                         onChange={(e) => setGroupConvention(e.target.value)}
                         required
@@ -155,7 +165,7 @@ const EditForm: React.FC<EditFormProps> = ({ editingProject }) => {
 
                     {generatedUrl && (
                         <TextField
-                            label="Project Access URL"
+                            label="URL d'accès au projet"
                             value={generatedUrl}
                             InputProps={{
                                 readOnly: true,
@@ -171,8 +181,8 @@ const EditForm: React.FC<EditFormProps> = ({ editingProject }) => {
                         />
                     )}
 
-                    <Button type="submit" variant="contained">
-                        Mettre à jour
+                    <Button type="submit" variant="contained" disabled={!csrfToken}>
+                        {csrfToken ? "Mettre à jour" : "Chargement sécurité..."}
                     </Button>
                 </form>
             </CardContent>

@@ -14,14 +14,25 @@ const LoginPage: React.FC = () => {
         e.preventDefault();
 
         try {
-            const res = await axios.post(`${import.meta.env.VITE_API_URL}/auth/login`, {
-                username,
-                password,
+            // 🔹 Étape 1 : Récupérer le token CSRF du backend
+            const csrfRes = await axios.get(`${import.meta.env.VITE_API_URL}/csrf-token`, {
+                withCredentials: true, // indispensable pour récupérer le cookie
             });
+            const csrfToken = csrfRes.data.csrfToken;
+
+            // 🔹 Étape 2 : Envoyer la requête de login avec le header CSRF
+            const res = await axios.post(
+                `${import.meta.env.VITE_API_URL}/auth/login`,
+                { username, password },
+                {
+                    headers: { "X-CSRF-Token": csrfToken },
+                    withCredentials: true, // pour envoyer le cookie CSRF
+                }
+            );
 
             const data = res.data;
 
-            // ✅ Stockage du token via le contexte
+            // ✅ Stocker le JWT via le contexte
             login(data.token);
             console.log("✅ JWT stocké via AuthContext :", data.token);
 

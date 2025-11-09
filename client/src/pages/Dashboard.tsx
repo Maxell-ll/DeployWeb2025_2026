@@ -19,7 +19,25 @@ const Dashboard: React.FC = () => {
     const { token, logout } = useAuth();
     const navigate = useNavigate();
     const [projects, setProjects] = useState<Project[]>([]);
+    const [csrfToken, setCsrfToken] = useState<string>("");
 
+    // 🔹 Récupération du token CSRF au chargement
+    useEffect(() => {
+        const fetchCsrfToken = async () => {
+            try {
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/csrf-token`, {
+                    withCredentials: true,
+                });
+                setCsrfToken(res.data.csrfToken);
+            } catch (err) {
+                console.error("❌ Erreur récupération CSRF token :", err);
+            }
+        };
+
+        fetchCsrfToken();
+    }, []);
+
+    // 🔹 Récupération des projets
     useEffect(() => {
         if (!token) {
             navigate("/login");
@@ -46,12 +64,27 @@ const Dashboard: React.FC = () => {
         fetchProjects();
     }, [token, navigate, logout]);
 
+    // 🔹 Suppression sécurisée d’un projet
     const handleDelete = async (projectId: number) => {
         if (!confirm("Voulez-vous vraiment supprimer ce projet ?")) return;
 
         try {
+            // Si pas de token CSRF, on le recharge
+            let tokenToUse = csrfToken;
+            if (!tokenToUse) {
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/csrf-token`, {
+                    withCredentials: true,
+                });
+                tokenToUse = res.data.csrfToken;
+                setCsrfToken(tokenToUse);
+            }
+
             await axios.delete(`${import.meta.env.VITE_API_URL}/projects/${projectId}`, {
-                headers: { Authorization: `Bearer ${token}` },
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "X-CSRF-Token": tokenToUse,
+                },
+                withCredentials: true,
             });
 
             alert("✅ Projet supprimé avec succès !");

@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { TextField, Button, Card, CardContent, Typography } from "@mui/material";
+import {
+    TextField,
+    Button,
+    Card,
+    CardContent,
+    Typography,
+} from "@mui/material";
 import axios from "axios";
 import { useStudents } from "../context/StudentContext";
 import { useProjects } from "../context/ProjectContext";
@@ -12,19 +18,19 @@ interface ProjectPublic {
     maxStudents: number;
 }
 
-export const CreateGroup: React.FC = () => {
+const CreateGroup: React.FC = () => {
     const { projectId, uniqueKey } = useParams<{ projectId: string; uniqueKey: string }>();
     const { students, setStudents, clearStudents } = useStudents();
     const { projects } = useProjects();
 
     const [project, setProject] = useState<ProjectPublic | null>(null);
+    const [csrfToken, setCsrfToken] = useState<string>("");
 
     // 🔹 Récupération du projet (via context ou API publique)
     useEffect(() => {
         const loadProject = async () => {
             if (!projectId || !uniqueKey) return;
 
-            // Vérifie si le projet existe déjà dans le context
             const existing = projects.find((p) => p.id === Number(projectId));
             if (existing) {
                 setProject(existing);
@@ -37,10 +43,10 @@ export const CreateGroup: React.FC = () => {
                 return;
             }
 
-            // Sinon, requête publique
             try {
                 const res = await axios.get(
-                    `${import.meta.env.VITE_API_URL}/projects/public/${projectId}/${uniqueKey}`
+                    `${import.meta.env.VITE_API_URL}/projects/public/${projectId}/${uniqueKey}`,
+                    { withCredentials: true }
                 );
                 const data = res.data;
                 setProject(data);
@@ -52,13 +58,33 @@ export const CreateGroup: React.FC = () => {
                     }))
                 );
             } catch (err: any) {
-                console.error("❌ Erreur récupération projet :", err.response?.data || err.message);
+                console.error(
+                    "❌ Erreur récupération projet :",
+                    err.response?.data || err.message
+                );
                 alert(err.response?.data?.message || "Erreur lors du chargement du projet.");
             }
         };
 
         loadProject();
     }, [projectId, uniqueKey, projects, setStudents]);
+
+    // 🔹 Récupération du CSRF token
+    useEffect(() => {
+        const getCsrfToken = async () => {
+            try {
+                const res = await axios.get(
+                    `${import.meta.env.VITE_API_URL.replace("/api", "")}/api/csrf-token`,
+                    { withCredentials: true }
+                );
+                setCsrfToken(res.data.csrfToken);
+            } catch (err) {
+                console.error("❌ Erreur récupération CSRF token :", err);
+            }
+        };
+
+        getCsrfToken();
+    }, []);
 
     const handleStudentChange = (
         index: number,
@@ -97,7 +123,13 @@ export const CreateGroup: React.FC = () => {
             const res = await axios.post(
                 `${import.meta.env.VITE_API_URL}/groups/${projectId}/${uniqueKey}`,
                 { students },
-                { headers: { "Content-Type": "application/json" } }
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-Token": csrfToken || "",
+                    },
+                    withCredentials: true,
+                }
             );
 
             alert("✅ Groupe créé avec succès !");
@@ -110,15 +142,17 @@ export const CreateGroup: React.FC = () => {
                 );
             }
         } catch (err: any) {
-            console.error("❌ Erreur création groupe :", err.response?.data || err.message);
+            console.error(
+                "❌ Erreur création groupe :",
+                err.response?.data || err.message
+            );
             alert(err.response?.data?.message || "Erreur lors de la création du groupe.");
         }
     };
 
+    // 🔹 Nettoyage du state students à la sortie
     useEffect(() => {
-        return () => {
-            clearStudents();
-        };
+        return () => clearStudents();
     }, []);
 
     return (
@@ -173,8 +207,8 @@ export const CreateGroup: React.FC = () => {
                         <Button variant="contained" color="secondary" onClick={addStudent}>
                             + Ajouter un étudiant
                         </Button>
-                        <Button type="submit" variant="contained" color="primary">
-                            Créer le groupe
+                        <Button type="submit" variant="contained" color="primary" disabled={!csrfToken}>
+                            {csrfToken ? "Créer le groupe" : "Chargement sécurité..."}
                         </Button>
                     </form>
                 </CardContent>

@@ -22,7 +22,7 @@ interface GroupContextType {
 const GroupContext = createContext<GroupContextType | undefined>(undefined);
 
 export const GroupProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { token, logout } = useAuth();
+    const { token, csrfToken, logout } = useAuth();
     const [groups, setGroups] = useState<Group[]>([]);
 
     const fetchGroups = useCallback(
@@ -35,24 +35,30 @@ export const GroupProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
             try {
                 const res = await axios.get(`${API_URL}/groups/project/${projectIdNumber}`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                    withCredentials: true,
+                    headers: {
+                        Authorization: token ? `Bearer ${token}` : "",
+                        "X-CSRF-Token": csrfToken || "",
+                    },
                 });
 
-                if (res.status === 401) return logout();
+                if (res.status === 401) {
+                    logout();
+                    return;
+                }
 
-                const data = res.data;
-                if (!Array.isArray(data)) {
-                    console.warn("Réponse inattendue pour fetchGroups :", data);
+                if (!Array.isArray(res.data)) {
+                    console.warn("Réponse inattendue pour fetchGroups :", res.data);
                     setGroups([]);
                     return;
                 }
 
-                setGroups(data);
+                setGroups(res.data);
             } catch (err) {
                 console.error("Erreur fetchGroups :", err);
             }
         },
-        [token, logout]
+        [token, csrfToken, logout]
     );
 
     const createGroup = useCallback(
@@ -62,19 +68,23 @@ export const GroupProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                     `${API_URL}/groups/${projectId}/${uniqueKey}`,
                     { students },
                     {
+                        withCredentials: true,
                         headers: {
+                            Authorization: token ? `Bearer ${token}` : "",
                             "Content-Type": "application/json",
-                            Authorization: `Bearer ${token}`,
+                            "X-CSRF-Token": csrfToken || "",
                         },
                     }
                 );
 
-                setGroups((prev) => [...prev, res.data.group]);
+                if (res.data?.group) {
+                    setGroups((prev) => [...prev, res.data.group]);
+                }
             } catch (err) {
                 console.error("Erreur createGroup :", err);
             }
         },
-        [token]
+        [token, csrfToken]
     );
 
     const clearGroups = () => setGroups([]);

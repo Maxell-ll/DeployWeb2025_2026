@@ -38,8 +38,18 @@ export const createGroup = async (req: Request, res: Response) => {
     const { projectId, uniqueKey } = req.params;
     const { students } = req.body;
 
-    if (!projectId || !uniqueKey || !Array.isArray(students)) {
+    if (!projectId || !uniqueKey || !Array.isArray(students) || students.length === 0) {
         return res.status(400).json({ message: "Données manquantes ou invalides" });
+    }
+
+    // 🧠 Vérifie que tous les étudiants ont un nom complet et un pseudo GitHub
+    for (const s of students) {
+        if (!s.fullName || s.fullName.trim() === "") {
+            return res.status(400).json({ message: "Chaque étudiant doit avoir un nom complet." });
+        }
+        if (!s.githubUsername || s.githubUsername.trim() === "") {
+            return res.status(400).json({ message: "Chaque étudiant doit avoir un identifiant GitHub." });
+        }
     }
 
     const projectIdNumber = Number(projectId);
@@ -48,10 +58,9 @@ export const createGroup = async (req: Request, res: Response) => {
     }
 
     try {
-        // 🔹 Récupère le projet et le prof
         const project = await prisma.project.findUnique({
             where: { id: projectIdNumber },
-            include: { user: true, groups: true },
+            include: { user: true, groups: { include: { students: true } } },
         });
 
         if (!project || !project.uniqueUrl.includes(uniqueKey)) {
@@ -65,43 +74,55 @@ export const createGroup = async (req: Request, res: Response) => {
 
         const octokit = new Octokit({ auth: prof.githubToken });
 
-        // 🔹 Vérification GitHub des étudiants
+        // 🔹 Vérification GitHub : chaque pseudo doit exister
         for (const s of students) {
+            const username = s.githubUsername.trim();
             try {
-                await octokit.users.getByUsername({ username: s.githubUsername });
-            } catch (error: any) {
-                if (error.status === 404) {
-                    return res
-                        .status(400)
-                        .json({ message: `Le compte GitHub "${s.githubUsername}" n'existe pas.` });
+                const response = await octokit.users.getByUsername({ username });
+                if (!response?.data?.login) {
+                    return res.status(400).json({
+                        message: `Le compte GitHub "${username}" n'existe pas.`,
+                    });
                 }
-                console.error("Erreur lors de la vérification GitHub :", error);
-                return res.status(500).json({ message: "Erreur lors de la vérification GitHub" });
+            } catch (err: any) {
+                if (err.status === 404) {
+                    return res.status(400).json({
+                        message: `Le compte GitHub "${username}" n'existe pas.`,
+                    });
+                }
+                console.error(`Erreur API GitHub pour "${username}" :`, err);
+                return res.status(500).json({
+                    message: `Erreur lors de la vérification du compte GitHub "${username}".`,
+                });
             }
         }
 
-        // 🔹 Génération du nom de groupe selon la convention
+        // 🔹 Vérifie les doublons d’étudiants dans le même projet
+        const existingStudents = project.groups.flatMap((g) => g.students);
+        const existingGitHubs = new Set(existingStudents.map((s) => s.githubUsername.toLowerCase()));
+
+        const duplicate = students.find((s) => existingGitHubs.has(s.githubUsername.toLowerCase()));
+        if (duplicate) {
+            return res.status(400).json({
+                message: `L'étudiant "${duplicate.githubUsername}" est déjà présent dans un groupe de ce projet.`,
+            });
+        }
+
+        // 🔹 Génère le nom du groupe
         const existingCount = project.groups.length;
         const nextNumber = (existingCount + 1).toString().padStart(2, "0");
-        const groupName = project.groupConvention.replace("XX", nextNumber);
+        let groupName = project.groupConvention.replace("XX", nextNumber);
 
-        // 🔹 Création du groupe en base
-        const group = await prisma.group.create({
-            data: {
-                name: groupName,
-                projectId: projectIdNumber,
-                students: {
-                    create: students.map((s: any) => ({
-                        fullName: s.fullName,
-                        githubUsername: s.githubUsername,
-                    })),
-                },
-            },
-            include: { students: true },
-        });
-
-        // 🔹 Création du repo GitHub dans l’organisation du projet
+        // Vérifie que le repo n’existe pas déjà dans l’organisation
         const org = project.githubOrg;
+        try {
+            await octokit.repos.get({ owner: org, repo: groupName });
+            groupName = `${groupName}-2`;
+        } catch {
+            // Repo n'existe pas → OK
+        }
+
+        // 🔹 Crée le repo avant la transaction
         try {
             await octokit.repos.createInOrg({
                 org,
@@ -110,13 +131,32 @@ export const createGroup = async (req: Request, res: Response) => {
                 description: `Repository pour le groupe ${groupName} du projet ${project.name}`,
             });
         } catch (err: any) {
-            console.error("⚠️ Erreur création repo :", err);
+            console.error("⚠️ Erreur création repo :", err.response?.data || err);
             return res.status(500).json({ message: "Erreur lors de la création du dépôt GitHub" });
         }
 
-        // 🔹 Ajout des étudiants comme collaborateurs (permission push)
+        // 🔹 Transaction Prisma : création du groupe et des étudiants
+        const group = await prisma.$transaction(async (tx) => {
+            return tx.group.create({
+                data: {
+                    name: groupName,
+                    projectId: projectIdNumber,
+                    students: {
+                        connectOrCreate: students.map((s: any) => ({
+                            where: { githubUsername: s.githubUsername },
+                            create: {
+                                fullName: s.fullName.trim(),
+                                githubUsername: s.githubUsername.trim(),
+                            },
+                        })),
+                    },
+                },
+                include: { students: true },
+            });
+        });
+
+        // 🔹 Ajout des étudiants comme collaborateurs du repo
         for (const student of group.students) {
-            if (!student.githubUsername) continue;
             try {
                 await octokit.repos.addCollaborator({
                     owner: org,
@@ -129,9 +169,8 @@ export const createGroup = async (req: Request, res: Response) => {
             }
         }
 
-        // ✅ Le prof est déjà admin du repo car il le crée via son token
         res.status(201).json({
-            message: `Groupe "${groupName}" créé et dépôt GitHub associé`,
+            message: `Groupe "${groupName}" créé avec succès et dépôt GitHub associé.`,
             group,
         });
     } catch (err) {

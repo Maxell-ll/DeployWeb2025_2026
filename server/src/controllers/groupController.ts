@@ -204,3 +204,44 @@ export const getGroupsByProject = async (req: Request, res: Response) => {
         res.status(500).json({ message: "Erreur serveur" });
     }
 };
+
+// 🔹 DELETE /groups/:groupId
+export const deleteGroup = async (req: Request, res: Response) => {
+    const { groupId } = req.params;
+    if (!groupId) return res.status(400).json({ message: "groupId manquant" });
+
+    const idNumber = Number(groupId);
+    if (isNaN(idNumber)) return res.status(400).json({ message: "groupId invalide" });
+
+    try {
+        const group = await prisma.group.findUnique({
+            where: { id: idNumber },
+            include: { project: { include: { user: true } } },
+        });
+        if (!group) return res.status(404).json({ message: "Groupe non trouvé" });
+
+        // 🔹 Supprime côté GitHub
+        const prof = group.project.user;
+        if (prof.githubToken) {
+            const octokit = new Octokit({ auth: prof.githubToken });
+            try {
+                await octokit.repos.delete({
+                    owner: group.project.githubOrg,
+                    repo: group.name,
+                });
+            } catch (err) {
+                console.warn("⚠️ Erreur suppression dépôt GitHub :", err);
+            }
+        }
+
+        // 🔹 Supprime dans la base
+        await prisma.group.delete({ where: { id: idNumber } });
+
+        res.json({ message: "Groupe supprimé avec succès" });
+    } catch (err) {
+        console.error("Erreur suppression groupe :", err);
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+};
+
+

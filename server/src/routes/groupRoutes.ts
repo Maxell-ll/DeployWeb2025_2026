@@ -3,6 +3,7 @@ import {
     getGroups,
     createGroup,
     getGroupsByProject,
+    deleteGroup,
 } from "../controllers/groupController";
 import {verifyToken} from "../middlewares/authMiddleware";
 
@@ -13,5 +14,6 @@ router.get("/project/:projectId", verifyToken,getGroupsByProject);
 router.get("/:projectId/:uniqueKey", getGroups);
 router.post("/:projectId/:uniqueKey", createGroup);
 
+router.delete("/:groupId", verifyToken, deleteGroup);
 
 export default router;

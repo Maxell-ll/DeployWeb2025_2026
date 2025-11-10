@@ -1,77 +1,86 @@
+// src/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
+import { loginRequest, logoutRequest } from "../services/authService";
+import { fetchCsrfToken } from "../services/csrfService";
 
 interface AuthContextType {
     token: string | null;
     csrfToken: string | null;
-    login: (token: string) => void;
-    logout: () => void;
+    login: (username: string, password: string) => Promise<boolean>;
+    logout: () => Promise<void>;
     isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
     token: null,
     csrfToken: null,
-    login: () => {},
-    logout: () => {},
+    login: async () => false,
+    logout: async () => {},
     isAuthenticated: false,
 });
-
-const API_URL = import.meta.env.VITE_API_URL;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [token, setToken] = useState<string | null>(localStorage.getItem("jwtToken"));
     const [csrfToken, setCsrfToken] = useState<string | null>(null);
 
-    // 🔹 Gestion du token JWT dans le localStorage
+    // 🔹 Synchroniser le token avec le localStorage
     useEffect(() => {
-        if (token) {
-            localStorage.setItem("jwtToken", token);
-        } else {
-            localStorage.removeItem("jwtToken");
-        }
+        if (token) localStorage.setItem("jwtToken", token);
+        else localStorage.removeItem("jwtToken");
     }, [token]);
 
-    // 🔹 Récupération du CSRF token dès le chargement du front
+    // 🔹 Récupérer le CSRF token au démarrage
     useEffect(() => {
-        const fetchCsrfToken = async () => {
+        const loadCsrf = async () => {
             try {
-                const res = await axios.get(`${API_URL.replace("/api", "")}/api/csrf-token`, {
-                    withCredentials: true,
-                });
-                setCsrfToken(res.data.csrfToken);
+                const token = await fetchCsrfToken();
+                setCsrfToken(token);
             } catch (err) {
-                console.error("❌ Erreur récupération CSRF token :", err);
+                console.error("❌ Erreur chargement CSRF token :", err);
             }
         };
-
-        fetchCsrfToken();
+        loadCsrf();
     }, []);
 
     // 🔹 Configuration globale d’Axios
     useEffect(() => {
-        axios.defaults.withCredentials = true; // permet l’envoi automatique des cookies (CSRF + session)
+        axios.defaults.withCredentials = true;
         axios.defaults.headers.common["Content-Type"] = "application/json";
 
-        if (token) {
-            axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-        } else {
-            delete axios.defaults.headers.common["Authorization"];
-        }
+        if (token) axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        else delete axios.defaults.headers.common["Authorization"];
 
-        if (csrfToken) {
-            axios.defaults.headers.common["X-CSRF-Token"] = csrfToken;
-        }
+        if (csrfToken) axios.defaults.headers.common["X-CSRF-Token"] = csrfToken;
+        else delete axios.defaults.headers.common["X-CSRF-Token"];
     }, [token, csrfToken]);
 
-    const login = (newToken: string) => setToken(newToken);
+    // 🔹 Fonction login (appelle le service)
+    const login = async (username: string, password: string): Promise<boolean> => {
+        try {
+            const res = await loginRequest(username, password);
+            if (res.token) {
+                setToken(res.token);
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("❌ Erreur login :", err);
+            return false;
+        }
+    };
 
-    const logout = () => {
-        setToken(null);
-        setCsrfToken(null);
-        localStorage.removeItem("jwtToken");
-        delete axios.defaults.headers.common["Authorization"];
-        delete axios.defaults.headers.common["X-CSRF-Token"];
+    // 🔹 Fonction logout
+    const logout = async () => {
+        try {
+            await logoutRequest();
+        } finally {
+            setToken(null);
+            setCsrfToken(null);
+            localStorage.removeItem("jwtToken");
+            delete axios.defaults.headers.common["Authorization"];
+            delete axios.defaults.headers.common["X-CSRF-Token"];
+        }
     };
 
     return (

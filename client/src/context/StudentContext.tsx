@@ -1,80 +1,48 @@
+// src/context/StudentContext.tsx
 import React, { createContext, useContext, useState, ReactNode } from "react";
-import axios from "axios";
 import { useAuth } from "./AuthContext";
-
-const API_URL = import.meta.env.VITE_API_URL;
-
-export interface Student {
-    id?: number;
-    fullName: string;
-    githubUsername: string;
-}
+import * as studentService from "../services/studentService";
 
 interface StudentContextType {
-    students: Student[];
-    addStudent: (student: Student) => void;
+    students: studentService.Student[];
+    addStudent: (student: studentService.Student) => void;
     removeStudent: (index: number) => void;
-    updateStudent: (index: number, field: keyof Student, value: string) => void;
+    updateStudent: (index: number, field: keyof studentService.Student, value: string) => void;
     clearStudents: () => void;
-    setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
-    syncStudents?: (projectId: number) => Promise<void>; // 🔹 nouvelle fonction (future)
+    setStudents: React.Dispatch<React.SetStateAction<studentService.Student[]>>;
+    syncStudents: (projectId: number) => Promise<void>;
 }
 
 const StudentContext = createContext<StudentContextType | undefined>(undefined);
 
 export const StudentProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const { token, csrfToken, logout } = useAuth();
-    const [students, setStudents] = useState<Student[]>([]);
+    const [students, setStudents] = useState<studentService.Student[]>([]);
 
-    const addStudent = (student: Student) => setStudents((prev) => [...prev, student]);
-
-    const removeStudent = (index: number) =>
-        setStudents((prev) => prev.filter((_, i) => i !== index));
-
-    const updateStudent = (index: number, field: keyof Student, value: string) => {
-        setStudents((prev) => {
+    const addStudent = (student: studentService.Student) => setStudents(prev => [...prev, student]);
+    const removeStudent = (index: number) => setStudents(prev => prev.filter((_, i) => i !== index));
+    const updateStudent = (index: number, field: keyof studentService.Student, value: string) => {
+        setStudents(prev => {
             const updated = [...prev];
             updated[index] = { ...updated[index], [field]: value };
             return updated;
         });
     };
-
     const clearStudents = () => setStudents([]);
 
-    /**
-     * 🔒 Exemple de fonction sécurisée si tu veux envoyer les étudiants vers ton backend
-     */
     const syncStudents = async (projectId: number) => {
+        if (!token) return;
         try {
-            await axios.post(
-                `${API_URL}/students/sync/${projectId}`,
-                { students },
-                {
-                    withCredentials: true,
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: token ? `Bearer ${token}` : "",
-                        "X-CSRF-Token": csrfToken || "",
-                    },
-                }
-            );
+            await studentService.syncStudents(students, projectId, token, csrfToken);
         } catch (err: any) {
+            console.error("Erreur syncStudents :", err);
             if (err.response?.status === 401) logout();
-            console.error("❌ Erreur syncStudents :", err);
         }
     };
 
     return (
         <StudentContext.Provider
-            value={{
-                students,
-                addStudent,
-                removeStudent,
-                updateStudent,
-                clearStudents,
-                setStudents,
-                syncStudents,
-            }}
+            value={{ students, addStudent, removeStudent, updateStudent, clearStudents, setStudents, syncStudents }}
         >
             {children}
         </StudentContext.Provider>
@@ -83,7 +51,6 @@ export const StudentProvider: React.FC<{ children: ReactNode }> = ({ children })
 
 export const useStudents = () => {
     const context = useContext(StudentContext);
-    if (!context)
-        throw new Error("useStudents doit être utilisé à l'intérieur d'un StudentProvider");
+    if (!context) throw new Error("useStudents doit être utilisé à l'intérieur d'un StudentProvider");
     return context;
 };

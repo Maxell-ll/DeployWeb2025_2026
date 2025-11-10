@@ -1,94 +1,107 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import axios from "axios";
-import { useAuth } from "./AuthContext";
+import React, {createContext, useContext, useState, useCallback, ReactNode} from "react";
+import {useAuth} from "./AuthContext";
+import * as projectService from "../services/projectService";
 
-const API_URL = import.meta.env.VITE_API_URL;
-
-export interface Project {
-    id: number;
-    name: string;
-    githubOrg: string;
-    minStudents: number;
-    maxStudents: number;
-    groupConvention: string;
-    userId: number;
-    uniqueKey?: string;
-    uniqueUrl?: string;
-}
+export type Project = projectService.Project;
 
 interface ProjectContextType {
     projects: Project[];
+    publicProject: Project | null;
     fetchProjects: () => Promise<void>;
-    fetchProjectById: (projectId: number) => Promise<Project | null>;
-    clearProjects: () => void;
+    fetchPublicProject: (projectId: number, uniqueKey: string) => Promise<void>;
+    clearPublicProject: () => void;
+    createProject: (data: Partial<Project>) => Promise<Project | null>;
+    updateProject: (id: number, data: Partial<Project>) => Promise<Project | null>;
+    fetchGithubOrgs: () => Promise<string[]>;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
-export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { token, csrfToken, logout } = useAuth();
+export const ProjectProvider: React.FC<{ children: ReactNode }> = ({children}) => {
+    const {token, csrfToken} = useAuth();
     const [projects, setProjects] = useState<Project[]>([]);
+    const [publicProject, setPublicProject] = useState<Project | null>(null);
 
-    // 🔹 Récupération de tous les projets
+    // 🔹 Récupération des projets
     const fetchProjects = useCallback(async () => {
+        if (!token) return;
         try {
-            const res = await axios.get(`${API_URL}/projects`, {
-                withCredentials: true,
-                headers: {
-                    Authorization: token ? `Bearer ${token}` : "",
-                    "X-CSRF-Token": csrfToken || "",
-                },
-            });
-
-            if (res.status === 401) {
-                logout();
-                return;
-            }
-
-            if (Array.isArray(res.data)) {
-                setProjects(res.data);
-            } else {
-                console.warn("Réponse inattendue pour fetchProjects :", res.data);
-                setProjects([]);
-            }
-        } catch (err: any) {
-            console.error("Erreur fetchProjects :", err);
-            if (err.response?.status === 401) logout();
+            const data = await projectService.fetchProjects(token);
+            setProjects(data);
+        } catch (err) {
+            console.error("❌ Erreur lors du chargement des projets :", err);
         }
-    }, [token, csrfToken, logout]);
+    }, [token]);
 
-    // 🔹 Récupération d’un projet spécifique
-    const fetchProjectById = useCallback(
-        async (projectId: number) => {
+    // 🔹 Récupération des organisations GitHub
+    const fetchGithubOrgs = useCallback(async (): Promise<string[]> => {
+        if (!token) return [];
+        try {
+            const orgs = await projectService.fetchGithubOrgs(token);
+            return orgs;
+        } catch (err) {
+            console.error("❌ Erreur lors du chargement des organisations GitHub :", err);
+            return [];
+        }
+    }, [token]);
+
+    // 🔹 Création d’un projet
+    const createProject = useCallback(
+        async (data: Partial<Project>): Promise<Project | null> => {
+            if (!token) return null;
             try {
-                const res = await axios.get(`${API_URL}/projects/${projectId}`, {
-                    withCredentials: true,
-                    headers: {
-                        Authorization: token ? `Bearer ${token}` : "",
-                        "X-CSRF-Token": csrfToken || "",
-                    },
-                });
-
-                if (res.status === 401) {
-                    logout();
-                    return null;
-                }
-
-                return res.data;
-            } catch (err: any) {
-                console.error("Erreur fetchProjectById :", err);
-                if (err.response?.status === 401) logout();
+                const newProject = await projectService.createProject(token, data);
+                setProjects((prev) => [...prev, newProject]);
+                return newProject;
+            } catch (err) {
+                console.error("❌ Erreur création projet :", err);
                 return null;
             }
         },
-        [token, csrfToken, logout]
+        [token]
     );
 
-    const clearProjects = () => setProjects([]);
+    // 🔹 Mise à jour d’un projet
+    const updateProject = useCallback(
+        async (id: number, data: Partial<Project>): Promise<Project | null> => {
+            if (!token || !csrfToken) return null;
+            try {
+                const updated = await projectService.updateProject(token, csrfToken, id, data);
+                setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
+                return updated;
+            } catch (err) {
+                console.error("❌ Erreur mise à jour projet :", err);
+                return null;
+            }
+        },
+        [token, csrfToken]
+    );
+
+    // 🔹 Récupération publique (étudiant)
+    const fetchPublicProject = useCallback(async (projectId: number, uniqueKey: string) => {
+        try {
+            const project = await projectService.fetchPublicProject(projectId, uniqueKey);
+            setPublicProject(project);
+        } catch (err) {
+            console.error("❌ Erreur chargement projet public :", err);
+            setPublicProject(null);
+        }
+    }, []);
+
+    const clearPublicProject = useCallback(() => setPublicProject(null), []);
 
     return (
         <ProjectContext.Provider
-            value={{ projects, fetchProjects, fetchProjectById, clearProjects }}
+            value={{
+                projects,
+                publicProject,
+                fetchProjects,
+                fetchPublicProject,
+                clearPublicProject,
+                createProject,
+                updateProject,
+                fetchGithubOrgs,
+            }}
         >
             {children}
         </ProjectContext.Provider>
@@ -97,7 +110,6 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
 export const useProjects = () => {
     const context = useContext(ProjectContext);
-    if (!context)
-        throw new Error("useProjects doit être utilisé à l'intérieur d'un ProjectProvider");
+    if (!context) throw new Error("useProjects doit être utilisé dans un ProjectProvider");
     return context;
 };

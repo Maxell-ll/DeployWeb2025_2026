@@ -1,70 +1,56 @@
 import React, { useState } from "react";
-import { TextField, Button, Card, CardContent, Typography } from "@mui/material";
+import { TextField, Button, Card, CardContent, Typography, Box } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 
 const LoginPage: React.FC = () => {
     const { login } = useAuth();
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
+        setLoading(true);
         try {
-            // 🔹 Étape 1 : Récupérer le token CSRF du backend
-            const csrfRes = await axios.get(`${import.meta.env.VITE_API_URL}/csrf-token`, {
-                withCredentials: true, // indispensable pour récupérer le cookie
-            });
-            const csrfToken = csrfRes.data.csrfToken;
-
-            // 🔹 Étape 2 : Envoyer la requête de login avec le header CSRF
-            const res = await axios.post(
-                `${import.meta.env.VITE_API_URL}/auth/login`,
-                { username, password },
-                {
-                    headers: { "X-CSRF-Token": csrfToken },
-                    withCredentials: true, // pour envoyer le cookie CSRF
-                }
-            );
-
-            const data = res.data;
-
-            // ✅ Stocker le JWT via le contexte
-            login(data.token);
-            console.log("✅ JWT stocké via AuthContext :", data.token);
-
-            if (data.githubToken) {
-                console.log("🐙 Token GitHub depuis DB :", data.githubToken);
-            }
-
-            navigate("/dashboard");
+            const success = await login(username, password);
+            if (success) navigate("/dashboard");
+            else alert("Identifiants incorrects. Réessaie !");
         } catch (err: any) {
-            console.error("❌ Erreur login :", err.response?.data || err.message);
-            alert(err.response?.data?.message || "Échec de la connexion. Vérifie tes identifiants.");
+            console.error("Erreur login :", err);
+            alert("Une erreur est survenue pendant la connexion.");
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
-        <div
-            style={{
+        <Box
+            sx={{
                 minHeight: "100vh",
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
+                bgcolor: "background.default", // utilise le thème sombre
+                p: 2,
             }}
         >
-            <Card sx={{ width: 400, p: 3, boxShadow: 3 }}>
+            <Card
+                sx={{
+                    width: 400,
+                    p: 3,
+                    borderRadius: 3,
+                    bgcolor: "background.paper", // gris sombre du thème
+                    boxShadow: 4,
+                }}
+            >
                 <CardContent>
                     <Typography variant="h4" align="center" gutterBottom>
                         Project Hub
                     </Typography>
-                    <form
-                        onSubmit={handleSubmit}
-                        style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-                    >
+
+                    <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                         <TextField
                             label="Username"
                             value={username}
@@ -80,13 +66,13 @@ const LoginPage: React.FC = () => {
                             fullWidth
                             required
                         />
-                        <Button type="submit" variant="contained" color="primary" fullWidth>
-                            Login
+                        <Button type="submit" variant="contained" color="primary" fullWidth disabled={loading}>
+                            {loading ? "Connexion..." : "Se connecter"}
                         </Button>
-                    </form>
+                    </Box>
                 </CardContent>
             </Card>
-        </div>
+        </Box>
     );
 };
 

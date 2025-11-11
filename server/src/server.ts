@@ -54,7 +54,7 @@ app.use(express.json());
 const csrfProtection = csurf({
     cookie: {
         httpOnly: true,   // token inaccessible depuis JS
-        secure: process.env.NODE_ENV === "development", //
+        secure: process.env.NODE_ENV === "production", // ✅ true sur Render (HTTPS)
         sameSite: "none", // ✅ "none" pour autoriser les cookies cross-site (GitHub Pages)
     },
 });

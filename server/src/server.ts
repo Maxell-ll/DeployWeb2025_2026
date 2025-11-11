@@ -21,17 +21,28 @@ const app = express();
 // 🧱 Sécurité avec Helmet
 app.use(
     helmet({
-        contentSecurityPolicy: false, // désactive CSP strict pour éviter les erreurs React/inline
+        contentSecurityPolicy: false, // désactive CSP strict pour React
         crossOriginEmbedderPolicy: false,
         crossOriginResourcePolicy: { policy: "cross-origin" },
     })
 );
 
-// 🌍 CORS et cookies
+// 🌍 Configuration CORS dynamique
+const allowedOrigins = [
+    "http://localhost:5173",              // pour ton environnement local
+    "https://maxell-ll.github.io",        // ton site GitHub Pages
+];
+
 app.use(
     cors({
-        origin: "http://localhost:5173", // ton frontend React
-        credentials: true, // autorise les cookies et en-têtes d’authentification
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error("Not allowed by CORS"));
+            }
+        },
+        credentials: true,
     })
 );
 
@@ -43,8 +54,8 @@ app.use(express.json());
 const csrfProtection = csurf({
     cookie: {
         httpOnly: true,   // token inaccessible depuis JS
-        secure: false,    // mettre true en production (HTTPS)
-        sameSite: "strict",
+        secure: process.env.NODE_ENV === "production", // ✅ true sur Render (HTTPS)
+        sameSite: "none", // ✅ "none" pour autoriser les cookies cross-site (GitHub Pages)
     },
 });
 
@@ -68,5 +79,5 @@ app.use(errorHandler);
 // 🔹 Démarrage du serveur
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`✅ Serveur sécurisé en cours d’exécution sur http://localhost:${PORT}`);
+    console.log(`✅ Serveur sécurisé en cours d’exécution sur port ${PORT}`);
 });

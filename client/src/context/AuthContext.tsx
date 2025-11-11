@@ -61,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const res = await loginRequest(username, password);
             if (res.token) {
                 setToken(res.token);
+                console.log("login réussi:",res.token);
                 return true;
             }
             return false;

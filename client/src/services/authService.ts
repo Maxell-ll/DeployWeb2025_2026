@@ -3,6 +3,7 @@ import { fetchCsrfToken, clearCsrfToken } from "./csrfService";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+console.log("🌍 API_URL utilisée :", API_URL);
 
 interface LoginResponse {
     token: string;
